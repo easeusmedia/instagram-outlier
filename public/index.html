@@ -1,0 +1,1570 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Instagram Outlier</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    --bg: #05070a;
+    --card: rgba(255,255,255,0.035);
+    --card-border: rgba(255,255,255,0.09);
+    --card-border-hover: rgba(255,255,255,0.18);
+    --primary: #0073E6;
+    --primary-hover: #0064c9;
+    --accent: #00AAFF;
+    --text: #EDF1F7;
+    --muted: #8A93A3;
+    --muted-dim: #5b6472;
+    --hot: #FF6B35;
+    --danger: #ff5c5c;
+    --btn-bg: linear-gradient(180deg, rgba(255,255,255,0.09), rgba(255,255,255,0.02));
+    --btn-bg-hover: linear-gradient(180deg, rgba(255,255,255,0.03), rgba(0,0,0,0.2));
+    --btn-border: rgba(255,255,255,0.14);
+    --btn-shadow: 0 1px 2px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.07);
+    --glass-blur: blur(20px) saturate(160%);
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    font-family: 'Inter', sans-serif;
+    color: var(--text);
+    background-color: var(--bg);
+    background-image:
+      radial-gradient(ellipse 1000px 750px at 50% 25%, transparent 30%, var(--bg) 88%),
+      radial-gradient(900px 500px at 10% -10%, rgba(0,115,230,0.16), transparent 60%),
+      radial-gradient(700px 500px at 100% 100%, rgba(0,170,255,0.09), transparent 60%),
+      linear-gradient(rgba(255,255,255,0.035) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255,255,255,0.035) 1px, transparent 1px);
+    background-size: auto, auto, auto, 44px 44px, 44px 44px;
+    background-attachment: fixed;
+  }
+  h1, h2, h3, .brand { font-family: 'Inter', sans-serif; }
+  a { color: var(--accent); }
+
+  header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 20px 40px;
+    flex-wrap: wrap;
+    gap: 16px;
+    position: sticky;
+    top: 0;
+    z-index: 95;
+    background: rgba(5,7,10,0.75);
+    backdrop-filter: var(--glass-blur);
+    -webkit-backdrop-filter: var(--glass-blur);
+    border-bottom: 1px solid var(--card-border);
+  }
+  .brand { font-size: 22px; font-weight: 700; }
+  .brand span { color: var(--accent); }
+  .header-actions { display: flex; align-items: center; gap: 10px; }
+  nav.tabs {
+    display: flex;
+    gap: 8px;
+    background: rgba(255,255,255,0.04);
+    backdrop-filter: var(--glass-blur);
+    -webkit-backdrop-filter: var(--glass-blur);
+    border: 1px solid var(--card-border);
+    padding: 4px;
+    border-radius: 12px;
+  }
+  nav.tabs button {
+    background: transparent;
+    border: 1px solid transparent;
+    color: var(--muted);
+    padding: 10px 18px;
+    border-radius: 9px;
+    font-family: 'Inter', sans-serif;
+    font-weight: 600;
+    font-size: 14px;
+    cursor: pointer;
+    transition: background .2s ease, box-shadow .2s ease, color .2s ease, border-color .2s ease;
+  }
+  nav.tabs button.active { background: var(--btn-bg); border-color: var(--btn-border); color: #fff; box-shadow: var(--btn-shadow); }
+
+  .icon-btn {
+    background: rgba(255,255,255,0.04);
+    border: 1px solid var(--card-border);
+    color: var(--muted);
+    width: 40px; height: 40px;
+    border-radius: 10px;
+    cursor: pointer;
+    font-size: 16px;
+    display: flex; align-items: center; justify-content: center;
+    transition: color .2s ease, border-color .2s ease, background .2s ease;
+  }
+  .icon-btn:hover { color: var(--text); border-color: var(--card-border-hover); background: rgba(0,0,0,0.2); }
+  .icon-btn.tiny { width: 22px; height: 22px; font-size: 11px; border-radius: 6px; }
+
+  .ghost-btn {
+    background: transparent;
+    border: 1px dashed var(--card-border-hover);
+    color: var(--muted);
+    padding: 8px 14px;
+    border-radius: 8px;
+    font-size: 12px;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: color .2s ease, border-color .2s ease, background .2s ease;
+  }
+  .ghost-btn:hover { color: var(--text); border-color: rgba(255,255,255,0.32); background: rgba(0,0,0,0.25); }
+
+  .app-layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 280px;
+    gap: 24px;
+    padding: 24px 40px 60px;
+    max-width: 1800px;
+    margin: 0 auto;
+    align-items: start;
+  }
+  .sidebar {
+    background: var(--card);
+    backdrop-filter: var(--glass-blur);
+    -webkit-backdrop-filter: var(--glass-blur);
+    border: 1px solid var(--card-border);
+    border-radius: 16px;
+    padding: 18px;
+    position: sticky;
+    top: 20px;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.05), 0 8px 30px rgba(0,0,0,0.35);
+  }
+  .sidebar-right {
+    position: fixed;
+    top: 0;
+    right: 0;
+    height: 100vh;
+    width: 320px;
+    max-width: calc(100vw - 40px);
+    border-radius: 0;
+    border-top: none;
+    border-right: none;
+    border-bottom: none;
+    padding: 84px 20px 24px;
+    overflow-y: auto;
+    z-index: 999;
+    transform: translateX(100%);
+    transition: transform .3s ease;
+  }
+  .sidebar-right.open { transform: translateX(0); }
+  .filter-backdrop {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.5);
+    z-index: 998; opacity: 0; pointer-events: none; transition: opacity .25s ease;
+  }
+  .filter-backdrop.open { opacity: 1; pointer-events: auto; }
+  @media (max-width: 1080px) {
+    .app-layout { grid-template-columns: 1fr; }
+    .sidebar-creators { position: static; }
+  }
+
+  .bookmarks-header { margin-bottom: 12px; }
+  .bookmarks-header .label { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600; }
+  .add-category-row { display: flex; flex-direction: column; gap: 8px; margin-bottom: 14px; }
+  .add-category-row input { width: 100%; }
+
+  .category-sections { display: flex; flex-direction: column; gap: 12px; }
+  .category-section {
+    background: rgba(255,255,255,0.03);
+    backdrop-filter: var(--glass-blur);
+    -webkit-backdrop-filter: var(--glass-blur);
+    border: 1px solid var(--card-border);
+    border-radius: 12px;
+    padding: 12px;
+    transition: border-color .15s, background .15s;
+  }
+  .category-section.drag-over { border-color: var(--accent); background: rgba(0,170,255,0.06); }
+  .category-section-header { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
+  .category-section-header .category-name { flex: 1; }
+  .category-section-header input[type="text"] {
+    flex: 1; padding: 3px 6px; font-size: inherit; font-weight: inherit; text-transform: none;
+  }
+  .dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+  .chip-row { display: flex; flex-wrap: wrap; gap: 8px; min-height: 30px; }
+
+  .chip {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: rgba(255,255,255,0.05);
+    border: 1px solid var(--card-border);
+    padding: 6px 8px 6px 8px;
+    border-radius: 20px;
+    font-size: 13px;
+    cursor: grab;
+  }
+  .chip img { width: 22px; height: 22px; border-radius: 50%; object-fit: cover; background: rgba(255,255,255,0.06); flex-shrink: 0; }
+  .chip.dragging { opacity: 0.35; }
+  .chip button {
+    background: rgba(255,255,255,0.08);
+    border: none;
+    color: var(--text);
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    cursor: pointer;
+    line-height: 1;
+  }
+  .empty-note { color: var(--muted-dim); font-size: 12px; font-style: italic; }
+
+  .content-center { min-width: 0; }
+  section.tab { display: none; }
+  section.tab.active { display: block; }
+
+  .search-row { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; margin-bottom: 10px; }
+  input[type="text"], select, input[type="number"] {
+    background: rgba(255,255,255,0.04);
+    backdrop-filter: var(--glass-blur);
+    -webkit-backdrop-filter: var(--glass-blur);
+    border: 1px solid var(--card-border);
+    color: var(--text);
+    padding: 12px 14px;
+    border-radius: 10px;
+    font-size: 14px;
+    font-family: inherit;
+  }
+  input:focus, select:focus { outline: none; border-color: var(--accent); }
+  #search-input { flex: 1; min-width: 260px; }
+  input[type="checkbox"] { accent-color: #e9ebf0; }
+
+  button.primary {
+    background: var(--btn-bg);
+    color: var(--text);
+    border: 1px solid var(--btn-border);
+    padding: 12px 22px;
+    border-radius: 10px;
+    font-family: 'Inter', sans-serif;
+    font-weight: 600;
+    cursor: pointer;
+    box-shadow: var(--btn-shadow);
+    transition: background .2s ease, box-shadow .2s ease, transform .15s ease, border-color .2s ease;
+  }
+  button.primary:hover {
+    background: var(--btn-bg-hover);
+    border-color: rgba(255,255,255,0.22);
+    box-shadow: 0 1px 3px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.04);
+  }
+  button.primary:active { transform: translateY(1px); box-shadow: inset 0 1px 4px rgba(0,0,0,0.5); }
+  button.primary:disabled { opacity: 0.5; cursor: default; }
+
+  button.secondary {
+    background: rgba(255,255,255,0.03);
+    border: 1px solid var(--card-border-hover);
+    color: var(--text);
+    padding: 11px 18px;
+    border-radius: 10px;
+    font-weight: 600;
+    cursor: pointer;
+    font-family: 'Inter', sans-serif;
+    box-shadow: var(--btn-shadow);
+    transition: border-color .2s ease, background .2s ease, box-shadow .2s ease;
+  }
+  button.secondary:hover { border-color: rgba(255,255,255,0.24); background: rgba(0,0,0,0.25); }
+  button.secondary.bookmarked { background: rgba(255,255,255,0.14); border-color: rgba(255,255,255,0.3); color: #fff; }
+  button.secondary:disabled { opacity: 0.6; cursor: default; }
+
+  .status { color: var(--muted); font-size: 14px; margin: 12px 0; }
+  .status.info { color: var(--accent); }
+  .status.error { color: var(--danger); }
+
+  .account-header {
+    display: none;
+    align-items: center;
+    gap: 20px;
+    background: var(--card);
+    backdrop-filter: var(--glass-blur);
+    -webkit-backdrop-filter: var(--glass-blur);
+    border: 1px solid var(--card-border);
+    border-radius: 16px;
+    padding: 22px;
+    margin-bottom: 28px;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.05), 0 8px 30px rgba(0,0,0,0.35);
+  }
+  .account-header img {
+    width: 76px; height: 76px; border-radius: 50%; object-fit: cover;
+    background: rgba(255,255,255,0.06);
+  }
+  .account-header .meta h2 { margin: 0 0 4px; font-size: 20px; }
+  .account-header .meta .handle { color: var(--accent); font-size: 14px; text-decoration: none; }
+  .account-header .meta .handle:hover { text-decoration: underline; }
+  .account-header .meta .followers { color: var(--muted); font-size: 13px; margin-top: 4px; }
+  .account-header .spacer { flex: 1; }
+
+  .load-more-row { text-align: center; margin-top: 24px; }
+
+  /* right sidebar filter panels */
+  .filter-panel { display: none; flex-direction: column; gap: 16px; }
+  .filter-panel.active { display: flex; }
+  .filter-panel h3 { font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); margin: 6px 0 -4px; font-family: 'Inter', sans-serif; font-weight: 600; }
+  .filter-panel h3:first-child { margin-top: 0; }
+  .field { display: flex; flex-direction: column; gap: 6px; }
+  .field label { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
+  .field select, .field input[type="number"] { width: 100%; }
+  .creator-checks { display: flex; flex-direction: column; gap: 8px; }
+  .creator-checks label {
+    display: flex; align-items: center; gap: 8px;
+    text-transform: none; font-size: 13px; color: var(--text);
+    background: rgba(255,255,255,0.04); border: 1px solid var(--card-border);
+    padding: 6px 10px; border-radius: 8px; cursor: pointer;
+  }
+  .creator-checks label img {
+    width: 22px; height: 22px; border-radius: 50%; object-fit: cover;
+    background: rgba(255,255,255,0.06); flex-shrink: 0;
+  }
+  .creator-checks-row {
+    display: flex; align-items: center; gap: 8px;
+    background: rgba(255,255,255,0.04); border: 1px solid var(--card-border);
+    padding: 6px 10px; border-radius: 8px;
+  }
+  .creator-checks-row label {
+    display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0;
+    text-transform: none; font-size: 13px; color: var(--text); cursor: pointer;
+  }
+  .creator-checks-row input[type="text"] {
+    flex: 1; padding: 3px 6px; font-size: 13px; text-transform: none;
+  }
+
+  .category-manage-row { display: flex; flex-direction: column; gap: 8px; margin-bottom: 16px; }
+  .category-manage-row input { width: 100%; }
+
+  /* dual-handle range slider (Outlier Score filter) */
+  .dual-slider { position: relative; height: 6px; margin: 30px 9px 6px; }
+  .dual-slider-track { position: absolute; inset: 0; background: rgba(255,255,255,0.12); border-radius: 999px; }
+  .dual-slider-range { position: absolute; top: 0; height: 100%; background: rgba(255,255,255,0.4); border-radius: 999px; }
+  .dual-slider input[type="range"] {
+    position: absolute; top: 50%; left: 0; width: 100%; height: 26px;
+    margin: 0; transform: translateY(-50%);
+    -webkit-appearance: none; appearance: none; background: transparent; outline: none; pointer-events: none;
+  }
+  .dual-slider input[type="range"]::-webkit-slider-runnable-track { background: transparent; }
+  .dual-slider input[type="range"]::-moz-range-track { background: transparent; border: none; }
+  .dual-slider input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none; pointer-events: auto;
+    width: 18px; height: 18px; border-radius: 50%;
+    background: #e9ebf0; border: 3px solid #14161b;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.5);
+    cursor: pointer; margin-top: 0;
+  }
+  .dual-slider input[type="range"]::-moz-range-thumb {
+    pointer-events: auto; width: 18px; height: 18px; border-radius: 50%;
+    background: #e9ebf0; border: 3px solid #14161b; box-shadow: 0 2px 6px rgba(0,0,0,0.5); cursor: pointer;
+  }
+  .slider-pill {
+    position: absolute; top: -28px; transform: translateX(-50%);
+    background: rgba(255,255,255,0.08); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+    border: 1px solid var(--card-border-hover); color: #fff;
+    padding: 3px 9px; border-radius: 999px; font-size: 12px; font-weight: 700;
+    white-space: nowrap; pointer-events: none;
+  }
+
+  .reel-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 20px; }
+
+  .reel-card { background: var(--card); backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur); border: 1px solid var(--card-border); border-radius: 16px; overflow: hidden; display: flex; flex-direction: column; transition: border-color .15s; box-shadow: inset 0 1px 0 rgba(255,255,255,0.05), 0 8px 24px rgba(0,0,0,0.3); }
+  .reel-card:hover { border-color: var(--card-border-hover); }
+  .reel-card.dragging { opacity: 0.35; }
+  .reel-card .thumb-wrap { position: relative; aspect-ratio: 9/16; background: #050708; }
+  .reel-card .thumb-wrap img, .reel-card .thumb-wrap video, .reel-card .thumb-wrap iframe {
+    width: 100%; height: 100%; object-fit: cover; border: none; display: block; background: #000;
+  }
+  .reel-card .badge {
+    position: absolute; top: 10px; left: 10px;
+    padding: 4px 10px; border-radius: 20px; font-weight: 700; font-size: 13px;
+    font-family: 'Inter', sans-serif;
+    background: rgba(8,10,14,0.78);
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+    text-shadow: 0 1px 2px rgba(0,0,0,0.6);
+  }
+  .badge.hot { color: #ff9466; border: 1px solid var(--hot); }
+  .badge.warm { color: #4dc4ff; border: 1px solid var(--accent); }
+  .badge.neutral { color: #d3d8e3; border: 1px solid var(--muted); }
+  .reel-card .cat-dot { position: absolute; top: 14px; right: 46px; width: 12px; height: 12px; border-radius: 50%; border: 2px solid rgba(0,0,0,0.4); z-index: 2; }
+  .reel-card .video-menu-btn {
+    position: absolute; top: 10px; right: 10px; z-index: 3;
+    width: 28px; height: 28px; border-radius: 50%;
+    background: rgba(8,10,14,0.78);
+    backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+    border: 1px solid var(--card-border-hover); color: var(--muted);
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; font-size: 16px; font-weight: 700; line-height: 1;
+    transition: color .2s ease, border-color .2s ease;
+  }
+  .reel-card .video-menu-btn.saved { color: #ffd166; border-color: #ffd166; }
+  .reel-card .video-menu-popover {
+    position: absolute; top: 42px; right: 10px; z-index: 4;
+    width: 200px; max-height: 280px; overflow-y: auto;
+    background: rgba(14,17,23,0.95);
+    backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+    border: 1px solid var(--card-border-hover); border-radius: 12px;
+    padding: 8px; display: none;
+    box-shadow: 0 12px 30px rgba(0,0,0,0.5);
+  }
+  .reel-card .video-menu-popover.open { display: block; }
+  .video-menu-popover button.video-menu-save {
+    width: 100%; text-align: left; background: transparent; border: none; color: var(--text);
+    padding: 8px 10px; border-radius: 8px; cursor: pointer; font-size: 13px; font-family: inherit;
+  }
+  .video-menu-popover button.video-menu-save:hover { background: rgba(255,255,255,0.06); }
+  .video-menu-popover button.video-menu-save.saved { color: #ffd166; }
+  .video-menu-divider { height: 1px; background: var(--card-border); margin: 6px 0; }
+  .video-menu-categories { display: flex; flex-direction: column; gap: 2px; max-height: 140px; overflow-y: auto; }
+  .video-menu-cat {
+    width: 100%; text-align: left; display: flex; align-items: center; gap: 8px;
+    background: transparent; border: none; color: var(--text);
+    padding: 7px 10px; border-radius: 8px; cursor: pointer; font-size: 13px; font-family: inherit;
+  }
+  .video-menu-cat:hover { background: rgba(255,255,255,0.06); }
+  .video-menu-cat.active { background: rgba(255,255,255,0.1); font-weight: 600; }
+  .video-menu-popover .video-menu-add-cat-btn { width: 100%; }
+  .reel-card .play-btn {
+    position: absolute; inset: 0; margin: auto; width: 54px; height: 54px; border-radius: 50%;
+    background: rgba(0,0,0,0.45); border: 2px solid var(--text); color: var(--text);
+    font-size: 20px; cursor: pointer; display: flex; align-items: center; justify-content: center;
+  }
+  .reel-card .body { padding: 14px 16px; display: flex; flex-direction: column; gap: 8px; }
+  .reel-card .handle { color: var(--accent); font-weight: 600; font-size: 13px; text-decoration: none; }
+  .reel-card .handle:hover { text-decoration: underline; }
+  .reel-card .stats { color: var(--muted); font-size: 12px; display: flex; gap: 10px; flex-wrap: wrap; }
+  .reel-card .row { display: flex; gap: 10px; flex-wrap: wrap; }
+  .reel-card .row a, .reel-card .row button {
+    font-size: 12px; color: var(--muted); background: rgba(255,255,255,0.05);
+    border: 1px solid var(--card-border); padding: 6px 10px; border-radius: 8px; cursor: pointer; text-decoration: none;
+    transition: color .2s ease, border-color .2s ease;
+  }
+  .reel-card .row a:hover, .reel-card .row button:hover { color: var(--text); border-color: var(--card-border-hover); }
+  .transcript-panel {
+    display: none;
+    background: rgba(0,0,0,0.25);
+    border: 1px solid var(--card-border);
+    border-radius: 8px;
+    padding: 10px;
+    font-size: 12px;
+    color: var(--muted);
+    max-height: 140px;
+    overflow-y: auto;
+    white-space: pre-wrap;
+  }
+  .transcript-panel.open { display: block; }
+
+  .modal-overlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.6);
+    display: none; align-items: center; justify-content: center; z-index: 100;
+  }
+  .modal {
+    background: rgba(14,17,23,0.75);
+    backdrop-filter: blur(28px) saturate(180%);
+    -webkit-backdrop-filter: blur(28px) saturate(180%);
+    border: 1px solid var(--card-border);
+    border-radius: 16px;
+    padding: 24px;
+    width: 380px;
+    max-width: calc(100vw - 40px);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.06), 0 20px 60px rgba(0,0,0,0.5);
+  }
+  .modal-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+  .modal-header h3 { margin: 0; font-size: 17px; }
+  .modal-desc { color: var(--muted); font-size: 13px; line-height: 1.5; margin: 0 0 18px; }
+  .modal .field { margin-bottom: 18px; }
+  .modal .field label { font-size: 12px; color: var(--muted); display: flex; justify-content: space-between; }
+  .modal button.primary { width: 100%; margin-top: 6px; }
+  .modal-section { border-top: 1px solid var(--card-border); margin-top: 20px; padding-top: 18px; }
+  .modal-section h4 { margin: 0 0 6px; font-size: 13px; }
+  .modal-row { display: flex; gap: 8px; margin-bottom: 10px; }
+  .modal-row button.secondary { flex: 1; padding: 9px 12px; font-size: 13px; }
+  .key-status { font-size: 12px; color: var(--muted); margin: 0 0 12px; min-height: 16px; }
+  .key-status.info { color: var(--accent); }
+  .key-status.error { color: var(--danger); }
+  .key-status.ok { color: #6be08a; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand">Instagram <span>Outlier</span></div>
+  <div class="header-actions">
+    <nav class="tabs">
+      <button id="tab-btn-add" class="active">Research</button>
+      <button id="tab-btn-videos">Playground</button>
+    </nav>
+    <button class="secondary" id="filter-toggle-btn">Filters</button>
+    <button class="icon-btn" id="settings-btn" title="Apify API key">&#9881;</button>
+  </div>
+</header>
+
+<div class="filter-backdrop" id="filter-backdrop"></div>
+
+<div class="app-layout">
+  <div class="content-center">
+    <section id="tab-add" class="tab active">
+      <div class="search-row">
+        <input type="text" id="search-input" placeholder="username, @handle, or instagram.com/username or /reel/... link" />
+        <button class="primary" id="search-btn">Load Reels</button>
+      </div>
+      <div class="status" id="add-status"></div>
+
+      <div class="account-header" id="account-header">
+        <img id="account-pic" src="" alt="" onerror="imgFallback(this,76,76)" />
+        <div class="meta">
+          <h2 id="account-name">—</h2>
+          <a class="handle" id="account-handle" href="#" target="_blank" rel="noopener">@—</a>
+          <div class="followers" id="account-followers"></div>
+        </div>
+        <div class="spacer"></div>
+        <button class="secondary" id="bookmark-btn">Bookmark</button>
+      </div>
+
+      <div class="reel-grid" id="add-reel-grid"></div>
+      <div class="load-more-row">
+        <button class="secondary" id="add-load-more-btn" style="display:none">Load More</button>
+      </div>
+    </section>
+
+    <section id="tab-videos" class="tab">
+      <div class="status" id="videos-status"></div>
+      <div class="reel-grid" id="videos-reel-grid"></div>
+      <div class="load-more-row">
+        <button class="secondary" id="videos-load-more-btn" style="display:none">Load More</button>
+      </div>
+    </section>
+  </div>
+
+  <aside class="sidebar sidebar-creators">
+    <div class="bookmarks-header"><span class="label">Bookmarked Creators</span></div>
+    <div class="add-category-row">
+      <input type="text" id="new-creator-category" placeholder="New category name" />
+      <button class="ghost-btn" id="add-creator-category-btn">+ Category</button>
+    </div>
+    <div id="bookmarks-empty" class="empty-note">none yet — search a creator on Research to bookmark it</div>
+    <div class="category-sections" id="creator-category-sections"></div>
+  </aside>
+
+  <aside class="sidebar sidebar-right" id="sidebar-right-panel">
+    <div class="filter-panel active" id="add-filters-panel">
+      <h3>Filters</h3>
+      <div id="add-filters-bar" style="display:none; flex-direction:column; gap:16px;">
+        <div class="field">
+          <label>Outlier Score range</label>
+          <div class="dual-slider">
+            <div class="dual-slider-track"></div>
+            <div class="dual-slider-range" id="add-range-fill"></div>
+            <input type="range" id="add-score-min" min="0" max="500" step="1" />
+            <input type="range" id="add-score-max" min="0" max="500" step="1" />
+            <div class="slider-pill" id="add-score-min-pill">0&times;</div>
+            <div class="slider-pill" id="add-score-max-pill">500&times;</div>
+          </div>
+        </div>
+        <div class="field">
+          <label>Sort by</label>
+          <select id="add-sort-select">
+            <option value="outlier">Outlier score</option>
+            <option value="views">Views</option>
+            <option value="newest">Newest</option>
+            <option value="length">Length</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Length</label>
+          <select id="add-length-select">
+            <option value="any">Any</option>
+            <option value="short">≤30s</option>
+            <option value="mid">31–60s</option>
+            <option value="long">60s+</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Upload date</label>
+          <select id="add-date-select">
+            <option value="all">All time</option>
+            <option value="7">Last 7 days</option>
+            <option value="30">Last 30 days</option>
+            <option value="90">Last 90 days</option>
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <div class="filter-panel" id="videos-filters-panel">
+      <h3>Creators</h3>
+      <div class="creator-checks" id="creator-checks"></div>
+
+      <h3>Video Categories</h3>
+      <div class="creator-checks" id="video-category-checks"></div>
+      <div class="category-manage-row">
+        <input type="text" id="new-video-category" placeholder="New video category name" />
+        <button class="ghost-btn" id="add-video-category-btn">+ Category</button>
+      </div>
+
+      <h3>Filters</h3>
+      <div class="field">
+        <label>Outlier Score range</label>
+        <div class="dual-slider">
+          <div class="dual-slider-track"></div>
+          <div class="dual-slider-range" id="videos-range-fill"></div>
+          <input type="range" id="videos-score-min" min="0" max="500" step="1" />
+          <input type="range" id="videos-score-max" min="0" max="500" step="1" />
+          <div class="slider-pill" id="videos-score-min-pill">0&times;</div>
+          <div class="slider-pill" id="videos-score-max-pill">500&times;</div>
+        </div>
+      </div>
+      <div class="field">
+        <label>Sort by</label>
+        <select id="sort-select">
+          <option value="outlier">Outlier score</option>
+          <option value="views">Views</option>
+          <option value="newest">Newest</option>
+          <option value="length">Length</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Length</label>
+        <select id="length-select">
+          <option value="any">Any</option>
+          <option value="short">≤30s</option>
+          <option value="mid">31–60s</option>
+          <option value="long">60s+</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Upload date</label>
+        <select id="date-select">
+          <option value="all">All time</option>
+          <option value="7">Last 7 days</option>
+          <option value="30">Last 30 days</option>
+          <option value="90">Last 90 days</option>
+        </select>
+      </div>
+    </div>
+  </aside>
+</div>
+
+<div class="modal-overlay" id="settings-modal">
+  <div class="modal">
+    <div class="modal-header">
+      <h3>Apify API Key</h3>
+      <button class="icon-btn tiny" id="settings-close">&#10005;</button>
+    </div>
+    <p class="modal-desc">Used for every Instagram scrape. Replace it here if the current key hits its usage limit or expires — takes effect immediately, no restart needed.</p>
+    <div class="field">
+      <label>Key</label>
+      <input type="text" id="apify-key-input" placeholder="apify_api_..." autocomplete="off" />
+    </div>
+    <p class="key-status" id="apify-key-status"></p>
+    <div class="modal-row">
+      <button class="secondary" id="apify-key-test-btn">Test Connection</button>
+      <button class="secondary" id="apify-key-remove-btn">Remove</button>
+    </div>
+    <button class="primary" id="apify-key-save-btn">Save Key</button>
+  </div>
+</div>
+
+<div class="modal-overlay" id="add-video-category-modal">
+  <div class="modal">
+    <div class="modal-header">
+      <h3>New Video Category</h3>
+      <button class="icon-btn tiny" id="add-video-category-modal-close">&#10005;</button>
+    </div>
+    <div class="field">
+      <label>Name</label>
+      <input type="text" id="add-video-category-modal-input" placeholder="e.g. Editing Ideas" />
+    </div>
+    <button class="primary" id="add-video-category-modal-create">Create</button>
+  </div>
+</div>
+
+<script>
+const REELS_BATCH = 15;
+
+const state = {
+  bookmarks: [],            // [{handle, addedAt, categoryId, profile}]
+  cache: {},                // handle -> { profile, reels }
+  currentHandle: null,
+  addReels: [],             // raw reels for the currently loaded Add-tab creator
+  addReelsLimit: REELS_BATCH,
+  addHasMore: false,
+  creatorCategories: [],
+  excludedCreators: new Set(), // handles explicitly deselected in the Playground feed
+  videosRenderLimit: REELS_BATCH,
+  videoCategories: [],      // independent of creatorCategories — for saved videos only
+  videoTags: {},            // shortCode -> categoryId
+  savedVideos: new Set(),   // shortCodes explicitly saved
+  excludedVideoCategories: new Set(), // category ids (or 'null' for Uncategorized) excluded in the Playground feed
+};
+
+const HOT_THRESHOLD = 10;  // outlier score at/above this renders the orange "hot" badge
+const WARM_THRESHOLD = 3;  // outlier score at/above this renders the blue "warm" badge
+
+const CATEGORY_COLORS = ['#00AAFF', '#a78bfa', '#34d399', '#fbbf24', '#f472b6', '#38bdf8', '#fb923c'];
+const categoryColor = (id) => CATEGORY_COLORS[id % CATEGORY_COLORS.length];
+
+const $ = (id) => document.getElementById(id);
+
+function fmtNum(n) {
+  if (n == null) return '—';
+  if (n >= 1_000_000) return (n / 1_000_000).toFixed(1) + 'M';
+  if (n >= 1_000) return (n / 1_000).toFixed(1) + 'K';
+  return String(n);
+}
+
+function fmtDuration(s) {
+  if (s == null) return '—';
+  const m = Math.floor(s / 60), r = Math.round(s % 60);
+  return `${m}:${String(r).padStart(2, '0')}`;
+}
+
+function badgeClass(score) {
+  if (score == null) return 'neutral';
+  if (score >= HOT_THRESHOLD) return 'hot';
+  if (score >= WARM_THRESHOLD) return 'warm';
+  return 'neutral';
+}
+
+function proxied(url) {
+  return url ? `/api/image-proxy?url=${encodeURIComponent(url)}` : '';
+}
+
+function imgFallback(el, w, h) {
+  el.onerror = null;
+  const r = Math.min(w, h) * 0.09;
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}">
+    <rect width="100%" height="100%" fill="#0d1117"/>
+    <g stroke="#8A93A3" stroke-width="2" fill="none" stroke-linejoin="round" stroke-linecap="round">
+      <rect x="${w * 0.28}" y="${h * 0.38}" width="${w * 0.44}" height="${h * 0.28}" rx="4"/>
+      <circle cx="${w / 2}" cy="${h * 0.52}" r="${r}"/>
+    </g>
+  </svg>`;
+  el.src = `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
+}
+
+function escapeHtml(str) {
+  const div = document.createElement('div');
+  div.textContent = str;
+  return div.innerHTML;
+}
+
+const SCORE_SLIDER_MAX = 500;
+
+function filterAndSort(reels, { sortBy, lengthFilter, dateFilter, scoreMin, scoreMax }) {
+  let items = [...reels];
+  if (lengthFilter && lengthFilter !== 'any') {
+    items = items.filter((r) => {
+      if (r.duration == null) return false;
+      if (lengthFilter === 'short') return r.duration <= 30;
+      if (lengthFilter === 'mid') return r.duration > 30 && r.duration <= 60;
+      if (lengthFilter === 'long') return r.duration > 60;
+      return true;
+    });
+  }
+  if (dateFilter && dateFilter !== 'all') {
+    const cutoff = Date.now() - Number(dateFilter) * 86400000;
+    items = items.filter((r) => r.timestamp && new Date(r.timestamp).getTime() >= cutoff);
+  }
+  if (scoreMin > 0 || scoreMax < SCORE_SLIDER_MAX) {
+    items = items.filter((r) => {
+      if (r.outlierScore == null) return false;
+      if (r.outlierScore < scoreMin) return false;
+      if (scoreMax < SCORE_SLIDER_MAX && r.outlierScore > scoreMax) return false;
+      return true;
+    });
+  }
+  const byDesc = (key) => (a, b) => (b[key] ?? -Infinity) - (a[key] ?? -Infinity);
+  if (sortBy === 'outlier') items.sort(byDesc('outlierScore'));
+  else if (sortBy === 'views') items.sort(byDesc('views'));
+  else if (sortBy === 'length') items.sort(byDesc('duration'));
+  else if (sortBy === 'newest') items.sort((a, b) => new Date(b.timestamp || 0) - new Date(a.timestamp || 0));
+  return items;
+}
+
+// --- fetch helper -------------------------------------------------------
+
+async function fetchJSON(url, opts = {}) {
+  const res = await fetch(url, {
+    method: opts.method || 'GET',
+    headers: opts.body ? { 'Content-Type': 'application/json' } : undefined,
+    body: opts.body ? JSON.stringify(opts.body) : undefined,
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || `Request failed (${res.status})`);
+  return data;
+}
+
+// Scraping an uncached account runs a real Apify actor, which can take
+// 20-30s; without this the UI just looks stuck on "Loading…".
+function startLoadingStatus(el) {
+  el.textContent = 'Loading…';
+  const timer = setTimeout(() => {
+    el.textContent = 'Still scraping — fresh Instagram data can take up to 30s…';
+  }, 6000);
+  return () => clearTimeout(timer);
+}
+
+// --- tabs -----------------------------------------------------------
+
+function switchTab(tab) {
+  $('tab-add').classList.toggle('active', tab === 'add');
+  $('tab-videos').classList.toggle('active', tab === 'videos');
+  $('tab-btn-add').classList.toggle('active', tab === 'add');
+  $('tab-btn-videos').classList.toggle('active', tab === 'videos');
+  $('add-filters-panel').classList.toggle('active', tab === 'add');
+  $('videos-filters-panel').classList.toggle('active', tab === 'videos');
+  if (tab === 'videos') {
+    loadVideosTab();
+  }
+}
+$('tab-btn-add').addEventListener('click', () => switchTab('add'));
+$('tab-btn-videos').addEventListener('click', () => switchTab('videos'));
+
+// --- filter drawer -----------------------------------------------------
+
+function setFilterDrawer(open) {
+  $('sidebar-right-panel').classList.toggle('open', open);
+  $('filter-backdrop').classList.toggle('open', open);
+}
+$('filter-toggle-btn').addEventListener('click', () => {
+  setFilterDrawer(!$('sidebar-right-panel').classList.contains('open'));
+});
+$('filter-backdrop').addEventListener('click', () => setFilterDrawer(false));
+
+document.addEventListener('click', (e) => {
+  if (!e.target.closest('.video-menu-btn') && !e.target.closest('.video-menu-popover')) {
+    document.querySelectorAll('.video-menu-popover.open').forEach((p) => p.classList.remove('open'));
+  }
+});
+
+// --- outlier score range filter (independent per panel) --------------------
+
+function scorePct(v) { return (v / SCORE_SLIDER_MAX) * 100; }
+
+function syncScoreSlider(p) {
+  const min = parseInt($(`${p}-score-min`).value, 10);
+  const max = parseInt($(`${p}-score-max`).value, 10);
+  $(`${p}-score-min-pill`).textContent = min + '×';
+  $(`${p}-score-max-pill`).textContent = (max >= SCORE_SLIDER_MAX ? max + '+' : max) + '×';
+  $(`${p}-score-min-pill`).style.left = scorePct(min) + '%';
+  $(`${p}-score-max-pill`).style.left = scorePct(max) + '%';
+  $(`${p}-range-fill`).style.left = scorePct(min) + '%';
+  $(`${p}-range-fill`).style.width = (scorePct(max) - scorePct(min)) + '%';
+}
+
+function getScoreRange(p) {
+  return { scoreMin: parseInt($(`${p}-score-min`).value, 10), scoreMax: parseInt($(`${p}-score-max`).value, 10) };
+}
+
+['add', 'videos'].forEach((p) => {
+  const minEl = $(`${p}-score-min`);
+  const maxEl = $(`${p}-score-max`);
+  minEl.value = 0;
+  maxEl.value = SCORE_SLIDER_MAX;
+  syncScoreSlider(p);
+  minEl.addEventListener('input', () => {
+    if (parseInt(minEl.value, 10) > parseInt(maxEl.value, 10)) maxEl.value = minEl.value;
+    syncScoreSlider(p);
+    if (p === 'add') { if (state.addReels.length) renderAddFeed(); }
+    else resetVideosRenderLimitAndRender();
+  });
+  maxEl.addEventListener('input', () => {
+    if (parseInt(maxEl.value, 10) < parseInt(minEl.value, 10)) minEl.value = maxEl.value;
+    syncScoreSlider(p);
+    if (p === 'add') { if (state.addReels.length) renderAddFeed(); }
+    else resetVideosRenderLimitAndRender();
+  });
+});
+
+// --- settings modal (Apify key) ---------------------------------------
+
+$('settings-btn').addEventListener('click', () => {
+  loadApifyKeyStatus();
+  $('settings-modal').style.display = 'flex';
+});
+$('settings-close').addEventListener('click', () => { $('settings-modal').style.display = 'none'; });
+$('settings-modal').addEventListener('click', (e) => {
+  if (e.target.id === 'settings-modal') $('settings-modal').style.display = 'none';
+});
+
+// --- add video category modal -------------------------------------------
+
+let pendingCategoryShortCode = null;
+
+function openAddVideoCategoryModal(shortCode) {
+  pendingCategoryShortCode = shortCode;
+  $('add-video-category-modal-input').value = '';
+  $('add-video-category-modal').style.display = 'flex';
+  $('add-video-category-modal-input').focus();
+}
+
+function closeAddVideoCategoryModal() {
+  pendingCategoryShortCode = null;
+  $('add-video-category-modal').style.display = 'none';
+}
+
+$('add-video-category-modal-close').addEventListener('click', closeAddVideoCategoryModal);
+$('add-video-category-modal').addEventListener('click', (e) => {
+  if (e.target.id === 'add-video-category-modal') closeAddVideoCategoryModal();
+});
+$('add-video-category-modal-input').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') $('add-video-category-modal-create').click();
+});
+$('add-video-category-modal-create').addEventListener('click', async () => {
+  const name = $('add-video-category-modal-input').value.trim();
+  if (!name || !pendingCategoryShortCode) return closeAddVideoCategoryModal();
+  const catData = await fetchJSON('/api/video-categories', { method: 'POST', body: { name } });
+  state.videoCategories = catData.categories;
+  renderVideoCategoryChecks();
+  const newCat = catData.categories[catData.categories.length - 1];
+  const tagData = await fetchJSON('/api/video-tags', { method: 'POST', body: { shortCode: pendingCategoryShortCode, categoryId: newCat.id } });
+  state.videoTags = tagData.videoTags;
+  state.savedVideos = new Set(tagData.shortCodes);
+  closeAddVideoCategoryModal();
+  refreshCurrentView();
+});
+
+// --- Apify API key -----------------------------------------------------
+
+function setKeyStatus(text, kind) {
+  const el = $('apify-key-status');
+  el.textContent = text;
+  el.classList.toggle('error', kind === 'error');
+  el.classList.toggle('ok', kind === 'ok');
+  el.classList.toggle('info', kind === 'info');
+}
+
+async function loadApifyKeyStatus() {
+  $('apify-key-input').value = '';
+  try {
+    const data = await fetchJSON('/api/settings/apify-key');
+    $('apify-key-input').placeholder = data.masked || 'apify_api_...';
+    setKeyStatus(data.usingOverride ? 'Using a saved custom key.' : 'Using the key from .env.', null);
+  } catch (err) {
+    setKeyStatus(err.message, 'error');
+  }
+}
+
+$('apify-key-test-btn').addEventListener('click', async () => {
+  const apiKey = $('apify-key-input').value.trim();
+  if (!apiKey) return setKeyStatus('Enter a key to test.', 'info');
+  setKeyStatus('Testing…', null);
+  try {
+    const result = await fetchJSON('/api/settings/apify-key/test', { method: 'POST', body: { apiKey } });
+    setKeyStatus(result.valid ? `Valid key${result.username ? ' — ' + result.username : ''}.` : 'This key is not valid.', result.valid ? 'ok' : 'error');
+  } catch (err) {
+    setKeyStatus(err.message, 'error');
+  }
+});
+
+$('apify-key-save-btn').addEventListener('click', async () => {
+  const apiKey = $('apify-key-input').value.trim();
+  if (!apiKey) return setKeyStatus('Enter a key to save.', 'info');
+  try {
+    await fetchJSON('/api/settings/apify-key', { method: 'POST', body: { apiKey } });
+    setKeyStatus('Saved.', 'ok');
+    await loadApifyKeyStatus();
+  } catch (err) {
+    setKeyStatus(err.message, 'error');
+  }
+});
+
+$('apify-key-remove-btn').addEventListener('click', async () => {
+  try {
+    await fetchJSON('/api/settings/apify-key', { method: 'DELETE' });
+    await loadApifyKeyStatus();
+  } catch (err) {
+    setKeyStatus(err.message, 'error');
+  }
+});
+
+// --- bookmarks + creator categories ---------------------------------------
+
+async function refreshBookmarks() {
+  const data = await fetchJSON('/api/bookmarks');
+  state.bookmarks = data.bookmarks;
+  data.bookmarks.forEach((b) => {
+    if (b.profile) state.cache[b.handle] = { ...(state.cache[b.handle] || {}), profile: b.profile };
+  });
+  renderCreatorCategorySections();
+  renderCreatorChecks();
+}
+
+function categoryHeaderHTML(cat, color) {
+  return `
+    <span class="dot" style="background:${color}"></span>
+    <span class="category-name">${escapeHtml(cat.name)}</span>
+    ${cat.id != null ? `<button class="icon-btn tiny rename-category" title="Rename category">&#9998;</button>
+    <button class="icon-btn tiny delete-category" title="Delete category">&#10005;</button>` : ''}
+  `;
+}
+
+function wireCategoryRename(headerEl, cat, apiBase, applyCategories) {
+  const renameBtn = headerEl.querySelector('.rename-category');
+  if (!renameBtn) return;
+  renameBtn.addEventListener('click', () => {
+    const nameSpan = headerEl.querySelector('.category-name');
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.value = cat.name;
+    nameSpan.replaceWith(input);
+    input.focus();
+    input.select();
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') input.blur();
+      if (e.key === 'Escape') { input.value = cat.name; input.blur(); }
+    });
+    input.addEventListener('blur', async () => {
+      const name = input.value.trim();
+      if (name && name !== cat.name) {
+        const data = await fetchJSON(`${apiBase}/${cat.id}`, { method: 'PATCH', body: { name } });
+        applyCategories(data.categories);
+      } else {
+        input.replaceWith(nameSpan);
+      }
+    }, { once: true });
+  });
+}
+
+function renderCreatorCategorySections() {
+  $('bookmarks-empty').style.display = state.bookmarks.length ? 'none' : 'block';
+  const container = $('creator-category-sections');
+  container.innerHTML = '';
+  if (!state.bookmarks.length && !state.creatorCategories.length) return;
+
+  const hasUncategorized = state.bookmarks.some((b) => (b.categoryId ?? null) === null);
+  const sections = [...state.creatorCategories, ...(hasUncategorized ? [{ id: null, name: 'Uncategorized' }] : [])];
+  sections.forEach((cat) => {
+    const section = document.createElement('div');
+    section.className = 'category-section';
+    const color = cat.id != null ? categoryColor(cat.id) : 'var(--muted-dim)';
+    const chips = state.bookmarks.filter((b) => (b.categoryId ?? null) === cat.id);
+
+    section.innerHTML = `
+      <div class="category-section-header">${categoryHeaderHTML(cat, color)}</div>
+      <div class="chip-row"></div>
+    `;
+
+    const chipRow = section.querySelector('.chip-row');
+    if (!chips.length) {
+      const hint = document.createElement('span');
+      hint.className = 'empty-note';
+      hint.textContent = 'Drag a creator here';
+      chipRow.appendChild(hint);
+    }
+    chips.forEach((b) => chipRow.appendChild(buildCreatorChip(b)));
+
+    section.addEventListener('dragover', (e) => { e.preventDefault(); section.classList.add('drag-over'); });
+    section.addEventListener('dragleave', () => section.classList.remove('drag-over'));
+    section.addEventListener('drop', async (e) => {
+      e.preventDefault();
+      section.classList.remove('drag-over');
+      const handle = e.dataTransfer.getData('text/plain');
+      if (!handle) return;
+      await fetchJSON('/api/bookmarks/category', { method: 'POST', body: { handle, categoryId: cat.id } });
+      await refreshBookmarks();
+    });
+
+    wireCategoryRename(section.querySelector('.category-section-header'), cat, '/api/creator-categories', (categories) => {
+      state.creatorCategories = categories;
+      renderCreatorCategorySections();
+    });
+
+    const delBtn = section.querySelector('.delete-category');
+    if (delBtn) {
+      delBtn.addEventListener('click', async () => {
+        const data = await fetchJSON(`/api/creator-categories/${cat.id}`, { method: 'DELETE' });
+        state.creatorCategories = state.creatorCategories.filter((c) => c.id !== cat.id);
+        state.bookmarks = data.bookmarks;
+        renderCreatorCategorySections();
+        renderCreatorChecks();
+      });
+    }
+
+    container.appendChild(section);
+  });
+}
+
+function buildCreatorChip(b) {
+  const chip = document.createElement('div');
+  chip.className = 'chip';
+  chip.draggable = true;
+  const picUrl = proxied(b.profile && b.profile.profilePicUrl);
+  chip.innerHTML = `<img src="${picUrl}" alt="" onerror="imgFallback(this,20,20)" />@${escapeHtml(b.handle)} <button title="Remove">&times;</button>`;
+  chip.addEventListener('dragstart', (e) => {
+    e.dataTransfer.setData('text/plain', b.handle);
+    chip.classList.add('dragging');
+  });
+  chip.addEventListener('dragend', () => chip.classList.remove('dragging'));
+  chip.querySelector('button').addEventListener('click', () => removeBookmark(b.handle));
+  return chip;
+}
+
+$('add-creator-category-btn').addEventListener('click', async () => {
+  const input = $('new-creator-category');
+  const name = input.value.trim();
+  if (!name) return;
+  const data = await fetchJSON('/api/creator-categories', { method: 'POST', body: { name } });
+  state.creatorCategories = data.categories;
+  input.value = '';
+  renderCreatorCategorySections();
+});
+
+async function removeBookmark(handle) {
+  await fetchJSON('/api/bookmarks', { method: 'POST', body: { handle, action: 'remove' } });
+  await refreshBookmarks();
+  if (state.currentHandle === handle) updateBookmarkButton(false);
+  loadVideosTab();
+}
+
+// --- add tab ------------------------------------------------------------
+
+$('search-btn').addEventListener('click', loadCreator);
+$('search-input').addEventListener('keydown', (e) => { if (e.key === 'Enter') loadCreator(); });
+
+async function loadCreator() {
+  const input = $('search-input').value.trim();
+  const statusEl = $('add-status');
+  statusEl.textContent = '';
+  statusEl.classList.remove('error', 'info');
+  $('account-header').style.display = 'none';
+  $('add-filters-bar').style.display = 'none';
+  $('add-reel-grid').innerHTML = '';
+  $('add-load-more-btn').style.display = 'none';
+  if (!input) {
+    statusEl.textContent = 'Enter a username or Instagram link.';
+    statusEl.classList.add('info');
+    return;
+  }
+  state.addReelsLimit = REELS_BATCH;
+  const stopLoadingStatus = startLoadingStatus(statusEl);
+  try {
+    const data = await fetchJSON(
+      `/api/creator?input=${encodeURIComponent(input)}&limit=${state.addReelsLimit}`
+    );
+    statusEl.textContent = '';
+    state.currentHandle = data.profile.handle;
+    state.addReels = data.reels;
+    state.addHasMore = !!data.hasMore;
+    state.cache[data.profile.handle] = { profile: data.profile, reels: data.reels };
+    renderAccountHeader(data.profile, data.bookmarked);
+    $('add-filters-bar').style.display = 'flex';
+    renderAddFeed();
+    updateLoadMoreButton();
+  } catch (err) {
+    statusEl.textContent = err.message;
+    statusEl.classList.add('error');
+  } finally {
+    stopLoadingStatus();
+  }
+}
+
+function updateLoadMoreButton() {
+  $('add-load-more-btn').style.display = state.addHasMore ? 'inline-block' : 'none';
+}
+
+$('add-load-more-btn').addEventListener('click', async () => {
+  const btn = $('add-load-more-btn');
+  btn.disabled = true;
+  btn.textContent = 'Loading…';
+  const statusEl = $('add-status');
+  const stopLoadingStatus = startLoadingStatus(statusEl);
+  try {
+    state.addReelsLimit += REELS_BATCH;
+    const data = await fetchJSON(
+      `/api/creator?input=${encodeURIComponent(state.currentHandle)}&limit=${state.addReelsLimit}`
+    );
+    state.addReels = data.reels;
+    state.addHasMore = !!data.hasMore;
+    state.cache[state.currentHandle] = { ...(state.cache[state.currentHandle] || {}), reels: data.reels };
+    renderAddFeed();
+    statusEl.textContent = '';
+  } catch (err) {
+    statusEl.textContent = err.message;
+    statusEl.classList.add('error');
+  } finally {
+    stopLoadingStatus();
+    btn.disabled = false;
+    btn.textContent = 'Load More';
+    updateLoadMoreButton();
+  }
+});
+
+function renderAddFeed() {
+  const items = filterAndSort(state.addReels || [], {
+    sortBy: $('add-sort-select').value,
+    lengthFilter: $('add-length-select').value,
+    dateFilter: $('add-date-select').value,
+    ...getScoreRange('add'),
+  });
+  renderReelGrid($('add-reel-grid'), items, state.currentHandle);
+}
+
+['add-sort-select', 'add-length-select', 'add-date-select'].forEach((id) =>
+  $(id).addEventListener('change', renderAddFeed)
+);
+
+function renderAccountHeader(profile, bookmarked) {
+  $('account-header').style.display = 'flex';
+  $('account-pic').src = proxied(profile.profilePicUrl);
+  $('account-name').textContent = profile.fullName || profile.handle;
+  $('account-handle').textContent = '@' + profile.handle;
+  $('account-handle').href = `https://instagram.com/${profile.handle}`;
+  $('account-followers').textContent = profile.followersCount != null ? fmtNum(profile.followersCount) + ' followers' : '';
+  updateBookmarkButton(bookmarked);
+}
+
+function updateBookmarkButton(bookmarked) {
+  const btn = $('bookmark-btn');
+  btn.classList.toggle('bookmarked', bookmarked);
+  btn.textContent = bookmarked ? 'Bookmarked ✓' : 'Bookmark';
+}
+
+$('bookmark-btn').addEventListener('click', async () => {
+  if (!state.currentHandle) return;
+  const bookmarked = $('bookmark-btn').classList.contains('bookmarked');
+  try {
+    await fetchJSON('/api/bookmarks', {
+      method: 'POST',
+      body: { handle: state.currentHandle, action: bookmarked ? 'remove' : 'add' },
+    });
+    updateBookmarkButton(!bookmarked);
+    await refreshBookmarks();
+  } catch (err) {
+    alert(err.message);
+  }
+});
+
+// --- reel card rendering (shared) ---------------------------------------
+
+function renderReelGrid(container, reels, handle) {
+  container.innerHTML = '';
+  reels.forEach((reel) => container.appendChild(buildReelCard(reel, handle)));
+}
+
+function makeEmbedIframe(shortCode) {
+  const iframe = document.createElement('iframe');
+  iframe.src = `https://www.instagram.com/reel/${shortCode}/embed`;
+  iframe.allow = 'autoplay';
+  return iframe;
+}
+
+function buildReelCard(reel, handle) {
+  const card = document.createElement('div');
+  card.className = 'reel-card';
+
+  const scoreLabel = reel.outlierScore != null ? reel.outlierScore.toFixed(1) + '×' : '—';
+  const cls = badgeClass(reel.outlierScore);
+  const isSaved = state.savedVideos.has(reel.shortCode);
+  const catId = state.videoTags[reel.shortCode];
+  const catDot = catId != null ? `<span class="cat-dot" style="background:${categoryColor(catId)}" title="Categorized"></span>` : '';
+
+  card.innerHTML = `
+    <div class="thumb-wrap">
+      <span class="badge ${cls}">${scoreLabel}</span>
+      ${catDot}
+      <button class="video-menu-btn${isSaved ? ' saved' : ''}" title="Save or categorize">&#8942;</button>
+      <div class="video-menu-popover">
+        <button class="video-menu-save${isSaved ? ' saved' : ''}">${isSaved ? '★ Saved' : '☆ Save'}</button>
+        ${state.videoCategories.length ? `<div class="video-menu-divider"></div>
+        <div class="video-menu-categories">
+          ${state.videoCategories.map((c) => `<button class="video-menu-cat${catId === c.id ? ' active' : ''}" data-cat="${c.id}">${escapeHtml(c.name)}${catId === c.id ? ' &#10003;' : ''}</button>`).join('')}
+        </div>` : ''}
+        <div class="video-menu-divider"></div>
+        <button class="ghost-btn video-menu-add-cat-btn">+ Add Category</button>
+      </div>
+      <img src="${proxied(reel.thumbnail)}" alt="" onerror="imgFallback(this,300,400)" />
+      <button class="play-btn" title="Play">▶</button>
+    </div>
+    <div class="body">
+      <a class="handle" href="https://instagram.com/${encodeURIComponent(handle)}" target="_blank" rel="noopener">@${escapeHtml(handle)}</a>
+      <div class="stats">
+        <span>${fmtNum(reel.views)} views</span>
+        <span>${fmtDuration(reel.duration)}</span>
+        <span>${reel.timestamp ? new Date(reel.timestamp).toLocaleDateString() : '—'}</span>
+      </div>
+      <div class="row">
+        <a href="${reel.url}" target="_blank" rel="noopener">Open on Instagram</a>
+        <button class="transcript-action">${reel.transcript ? 'Transcript' : 'Get Transcript'}</button>
+      </div>
+      <div class="transcript-panel${reel.transcript ? ' open' : ''}">
+        <div class="transcript-text">${reel.transcript ? escapeHtml(reel.transcript) : ''}</div>
+        <div class="row" style="margin-top:8px">
+          <button class="copy-transcript" style="${reel.transcript ? '' : 'display:none'}">Copy transcript</button>
+        </div>
+      </div>
+    </div>
+  `;
+
+  const playBtn = card.querySelector('.play-btn');
+  const thumbWrap = card.querySelector('.thumb-wrap');
+  playBtn.addEventListener('click', () => {
+    thumbWrap.innerHTML = '';
+    if (reel.videoUrl) {
+      const video = document.createElement('video');
+      video.src = reel.videoUrl;
+      video.controls = true;
+      video.autoplay = true;
+      video.playsInline = true;
+      video.setAttribute('referrerpolicy', 'no-referrer');
+      video.onerror = () => {
+        thumbWrap.innerHTML = '';
+        thumbWrap.appendChild(makeEmbedIframe(reel.shortCode));
+      };
+      thumbWrap.appendChild(video);
+    } else if (reel.shortCode) {
+      thumbWrap.appendChild(makeEmbedIframe(reel.shortCode));
+    }
+  }, { once: true });
+
+  const menuBtn = card.querySelector('.video-menu-btn');
+  const popover = card.querySelector('.video-menu-popover');
+  menuBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    document.querySelectorAll('.video-menu-popover.open').forEach((p) => { if (p !== popover) p.classList.remove('open'); });
+    popover.classList.toggle('open');
+  });
+
+  card.querySelector('.video-menu-save').addEventListener('click', async () => {
+    const nowSaved = !state.savedVideos.has(reel.shortCode);
+    const data = await fetchJSON('/api/saved-videos', { method: 'POST', body: { shortCode: reel.shortCode, saved: nowSaved } });
+    state.savedVideos = new Set(data.shortCodes);
+    state.videoTags = data.videoTags;
+    refreshCurrentView();
+  });
+
+  card.querySelectorAll('.video-menu-cat').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      const clickedId = Number(btn.dataset.cat);
+      const categoryId = catId === clickedId ? null : clickedId; // clicking the active one clears it
+      const data = await fetchJSON('/api/video-tags', { method: 'POST', body: { shortCode: reel.shortCode, categoryId } });
+      state.videoTags = data.videoTags;
+      state.savedVideos = new Set(data.shortCodes);
+      refreshCurrentView();
+    });
+  });
+
+  card.querySelector('.video-menu-add-cat-btn').addEventListener('click', () => {
+    popover.classList.remove('open');
+    openAddVideoCategoryModal(reel.shortCode);
+  });
+
+  const actionBtn = card.querySelector('.transcript-action');
+  const panel = card.querySelector('.transcript-panel');
+  const textEl = card.querySelector('.transcript-text');
+  const copyBtn = card.querySelector('.copy-transcript');
+
+  actionBtn.addEventListener('click', async () => {
+    if (reel.transcript) {
+      panel.classList.toggle('open');
+      return;
+    }
+    actionBtn.disabled = true;
+    actionBtn.textContent = 'Fetching…';
+    try {
+      const data = await fetchJSON(`/api/transcript?input=${encodeURIComponent(reel.url)}`);
+      reel.transcript = data.transcript;
+      textEl.textContent = reel.transcript;
+      copyBtn.style.display = '';
+      panel.classList.add('open');
+      actionBtn.textContent = 'Transcript';
+    } catch (err) {
+      actionBtn.textContent = 'No transcript';
+      actionBtn.title = err.message;
+      setTimeout(() => (actionBtn.textContent = 'Get Transcript'), 2500);
+    } finally {
+      actionBtn.disabled = false;
+    }
+  });
+
+  copyBtn.addEventListener('click', () => {
+    navigator.clipboard.writeText(reel.transcript);
+    copyBtn.textContent = 'Copied!';
+    setTimeout(() => (copyBtn.textContent = 'Copy transcript'), 1200);
+  });
+
+  return card;
+}
+
+// --- videos tab -----------------------------------------------------------
+
+function renderCreatorChecks() {
+  const box = $('creator-checks');
+  box.innerHTML = '';
+  state.bookmarks.forEach((b) => {
+    const label = document.createElement('label');
+    const checked = !state.excludedCreators.has(b.handle);
+    const picUrl = proxied(b.profile && b.profile.profilePicUrl);
+    label.innerHTML = `<input type="checkbox" value="${escapeHtml(b.handle)}" ${checked ? 'checked' : ''}/><img src="${picUrl}" alt="" onerror="imgFallback(this,22,22)" /> @${escapeHtml(b.handle)}`;
+    label.querySelector('input').addEventListener('change', (e) => {
+      if (e.target.checked) state.excludedCreators.delete(b.handle);
+      else state.excludedCreators.add(b.handle);
+      resetVideosRenderLimitAndRender();
+    });
+    box.appendChild(label);
+  });
+}
+
+function renderVideoCategoryChecks() {
+  const box = $('video-category-checks');
+  box.innerHTML = '';
+  const cats = [...state.videoCategories, { id: null, name: 'Uncategorized' }];
+  cats.forEach((cat) => {
+    const key = String(cat.id ?? 'null');
+    const row = document.createElement('div');
+    row.className = 'creator-checks-row';
+    const checked = !state.excludedVideoCategories.has(key);
+    const color = cat.id != null ? categoryColor(cat.id) : 'var(--muted-dim)';
+    row.innerHTML = `
+      <label>
+        <input type="checkbox" value="${key}" ${checked ? 'checked' : ''}/>
+        <span class="dot" style="background:${color}"></span>
+        <span class="category-name">${escapeHtml(cat.name)}</span>
+      </label>
+      ${cat.id != null ? `<button class="icon-btn tiny rename-category" title="Rename category">&#9998;</button>
+      <button class="icon-btn tiny delete-category" title="Delete category">&#10005;</button>` : ''}
+    `;
+    row.querySelector('input').addEventListener('change', (e) => {
+      if (e.target.checked) state.excludedVideoCategories.delete(key);
+      else state.excludedVideoCategories.add(key);
+      resetVideosRenderLimitAndRender();
+    });
+    wireCategoryRename(row, cat, '/api/video-categories', (categories) => {
+      state.videoCategories = categories;
+      renderVideoCategoryChecks();
+      refreshCurrentView();
+    });
+    const delBtn = row.querySelector('.delete-category');
+    if (delBtn) {
+      delBtn.addEventListener('click', async () => {
+        const data = await fetchJSON(`/api/video-categories/${cat.id}`, { method: 'DELETE' });
+        state.videoCategories = data.categories;
+        state.videoTags = data.videoTags;
+        renderVideoCategoryChecks();
+        refreshCurrentView();
+      });
+    }
+    box.appendChild(row);
+  });
+}
+
+$('add-video-category-btn').addEventListener('click', async () => {
+  const input = $('new-video-category');
+  const name = input.value.trim();
+  if (!name) return;
+  const data = await fetchJSON('/api/video-categories', { method: 'POST', body: { name } });
+  state.videoCategories = data.categories;
+  input.value = '';
+  renderVideoCategoryChecks();
+  refreshCurrentView();
+});
+
+function refreshCurrentView() {
+  if ($('tab-add').classList.contains('active')) renderAddFeed();
+  else renderVideosFeed();
+}
+
+function resetVideosRenderLimitAndRender() {
+  state.videosRenderLimit = REELS_BATCH;
+  renderVideosFeed();
+}
+['sort-select', 'length-select', 'date-select'].forEach((id) =>
+  $(id).addEventListener('change', resetVideosRenderLimitAndRender)
+);
+
+async function ensureCreatorCached(handle) {
+  if (state.cache[handle] && state.cache[handle].reels) return;
+  const data = await fetchJSON(`/api/creator?input=${encodeURIComponent(handle)}`);
+  state.cache[handle] = { profile: data.profile, reels: data.reels };
+}
+
+async function loadVideosTab() {
+  const statusEl = $('videos-status');
+  statusEl.classList.remove('error');
+  state.videosRenderLimit = REELS_BATCH;
+  await refreshVideoMeta();
+
+  // Playground always aggregates every bookmarked creator; the creator
+  // checklist filters what's visible, it doesn't change what gets loaded.
+  if (!state.bookmarks.length) {
+    statusEl.textContent = 'Bookmark a creator on Research to see their reels here.';
+    $('videos-reel-grid').innerHTML = '';
+    return;
+  }
+  const stopLoadingStatus = startLoadingStatus(statusEl);
+  try {
+    await Promise.all(state.bookmarks.map((b) => ensureCreatorCached(b.handle)));
+    statusEl.textContent = '';
+    renderVideosFeed();
+  } catch (err) {
+    statusEl.textContent = err.message;
+    statusEl.classList.add('error');
+  } finally {
+    stopLoadingStatus();
+  }
+}
+
+function collectVideosItems() {
+  const selectedHandles = Array.from($('creator-checks').querySelectorAll('input:checked')).map((i) => i.value);
+  const selectedCategories = new Set(
+    Array.from($('video-category-checks').querySelectorAll('input:checked')).map((i) => i.value)
+  );
+  let items = [];
+  selectedHandles.forEach((handle) => {
+    const entry = state.cache[handle];
+    if (!entry || !entry.reels) return;
+    entry.reels.forEach((reel) => items.push({ ...reel, handle }));
+  });
+  items = items.filter((r) => selectedCategories.has(String(state.videoTags[r.shortCode] ?? 'null')));
+  return filterAndSort(items, {
+    sortBy: $('sort-select').value,
+    lengthFilter: $('length-select').value,
+    dateFilter: $('date-select').value,
+    ...getScoreRange('videos'),
+  });
+}
+
+function renderVideosFeed() {
+  const allItems = collectVideosItems();
+  const grid = $('videos-reel-grid');
+  grid.innerHTML = '';
+  const shown = allItems.slice(0, state.videosRenderLimit || REELS_BATCH);
+  shown.forEach((reel) => grid.appendChild(buildReelCard(reel, reel.handle)));
+  $('videos-load-more-btn').style.display = allItems.length > shown.length ? 'inline-block' : 'none';
+
+  if (!allItems.length) $('videos-status').textContent = 'No reels match these filters.';
+  else $('videos-status').textContent = '';
+}
+
+$('videos-load-more-btn').addEventListener('click', () => {
+  state.videosRenderLimit = (state.videosRenderLimit || REELS_BATCH) + REELS_BATCH;
+  renderVideosFeed();
+});
+
+
+// --- init -----------------------------------------------------------------
+
+async function refreshVideoMeta() {
+  const [catData, tagData, savedData] = await Promise.all([
+    fetchJSON('/api/video-categories'),
+    fetchJSON('/api/video-tags'),
+    fetchJSON('/api/saved-videos'),
+  ]);
+  state.videoCategories = catData.categories;
+  state.videoTags = tagData.videoTags;
+  state.savedVideos = new Set(savedData.shortCodes);
+  renderVideoCategoryChecks();
+}
+
+async function init() {
+  try {
+    const creatorCats = await fetchJSON('/api/creator-categories');
+    state.creatorCategories = creatorCats.categories;
+    await refreshVideoMeta();
+  } catch {
+    // fall back to defaults already in state
+  }
+  await refreshBookmarks();
+}
+
+init();
+</script>
+</body>
+</html>
