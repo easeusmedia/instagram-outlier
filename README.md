@@ -28,13 +28,31 @@ Open [http://localhost:3000](http://localhost:3000).
 - Badge colors (orange "hot" ≥10×, blue "warm" ≥3×) are fixed, not configurable — they're just a quick visual signal, unrelated to the Outlier Score filter.
 - **Apify API key** (gear icon, top right): add, replace, test, or remove the Apify token used for all scraping without touching `.env` or restarting — useful when a key hits its usage limit. Falls back to `.env`'s `APIFY_TOKEN` when no override is saved.
 - **Creator categories**: group bookmarked creators (e.g. "Science & Tech") by dragging their chips between category sections in the sidebar. Add a category with the input above it, rename one with its pencil icon. An "Uncategorized" bucket only appears when something actually needs it.
-- **Save a video** with the **⋮** button on any reel card (Research or Playground). It opens a small menu: a "Save" toggle plus its own **video category** list — completely separate from creator categories, with its own names and its own management (rename/delete live in the Playground Filters drawer under "Video Categories"; you can also add a new one right from the card's menu). Filing a video into a category saves it automatically if it wasn't already; unsaving a video clears its category but never touches the creator's bookmark. A colored dot on the thumbnail shows which category a video is in.
+- **Save a video** with the **⋮** button on any reel card (Research or Playground). It opens a small menu: a "Save" toggle plus its own **video category** list — completely separate from creator categories, with its own names and its own management (rename/delete live in the Playground Filters drawer under "Video Categories"; you can also add a new one right from the card's menu). Filing a video into a category saves it automatically if it wasn't already; unsaving a video clears its category but never touches the creator's bookmark. A colored dot on the thumbnail shows which category a video is in. There's no "Uncategorized" bucket — untagged reels just aren't filtered by category. In the Filters drawer, check **★ Saved only** to see just the videos you've saved, and use the Video Categories checklist to narrow further.
 - **Layout**: the feed fills the wide left/main area; bookmarked creators live in a sidebar on the right; filters live in a drawer that slides in from the right on demand instead of permanently eating into feed width.
 - **Load More**: Research fetches reels from Apify in batches of 15 via **Load More**. Playground already has all of its (cached) reels in memory, so **Load More** there just reveals 15 more of the already-filtered/sorted list at a time — no extra network call.
+- **Script Generator** (sidebar, below Bookmarked Creators — visible on both Research and Playground): drag any reel card onto the drop zone to grab its transcript (fetching it first via Apify if it isn't cached yet, and reusing the same cache the per-card **Get Transcript** button uses — no duplicate Apify calls) and drop it in as a note, shown as a small thumbnail labeled "Script 1", "Script 2", etc. Click one to read or edit it full-screen. Once you've dragged in at least one, **✨ Script Genie** opens a window showing everything you've loaded plus a prompt box — write what you want (e.g. "write a new script inspired by these, about X"), hit **Generate Script** inside that window, and it sends your prompt plus every loaded script to an LLM with a "world's best viral scriptwriter" system prompt. The result can be copied or saved as a new script note. Configure the LLM in Settings (gear icon) — any OpenAI-compatible provider works via a Base URL + Model + API key; defaults to [Groq's free tier](https://console.groq.com/keys) (fast, open-source models, no cost).
 
 ## Storage
 
-Everything is stored in `data/store.db`, a SQLite file managed via [`sql.js`](https://github.com/sql-js/sql.js) (SQLite compiled to WebAssembly — no native build step). Delete that file to reset all data.
+Everything is stored in SQLite via [`@libsql/client`](https://github.com/tursodatabase/libsql-client-ts):
+
+- **Local dev**: with no `TURSO_DATABASE_URL` set, it uses a local file at `data/store.db`. Delete that file to reset all data.
+- **Hosted (Render, Vercel, etc.)**: set `TURSO_DATABASE_URL` and `TURSO_AUTH_TOKEN` in your environment to point at a [Turso](https://turso.tech) database instead. Same code, same SQL, no native build step, no server to run yourself — this is what makes the app deployable on platforms with no persistent local disk (Vercel's serverless functions in particular).
+
+To create a Turso database:
+
+```bash
+npm install -g @tursodatabase/cli   # or: curl -sSfL https://get.tur.so/install.sh | bash
+turso auth login
+turso db create instagram-outlier
+turso db show instagram-outlier --url        # → TURSO_DATABASE_URL
+turso db tokens create instagram-outlier     # → TURSO_AUTH_TOKEN
+```
+
+Paste both into `.env` (or your host's environment variable settings) alongside `APIFY_TOKEN`.
+
+> Note: switching from the local file to Turso starts with an empty database — bookmarks/cache built up locally don't carry over automatically.
 
 ## Cost controls
 
