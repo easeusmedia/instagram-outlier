@@ -188,8 +188,11 @@
   .category-section-header input[type="text"] {
     flex: 1; padding: 3px 6px; font-size: inherit; font-weight: inherit; text-transform: none;
   }
-  .dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; animation: dot-blink 1.8s ease-in-out infinite; }
-  @keyframes dot-blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.25; } }
+  .dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; animation: dot-blink 3.4s ease-in-out infinite; }
+  @keyframes dot-blink {
+    0%, 100% { opacity: 1; box-shadow: 0 0 6px 2px currentColor; }
+    50% { opacity: 0.3; box-shadow: 0 0 0 0 transparent; }
+  }
   .chip-row { display: flex; flex-wrap: wrap; gap: 8px; min-height: 30px; }
 
   .chip {
@@ -263,16 +266,29 @@
     position: relative;
     overflow: hidden;
     background:
-      radial-gradient(45% 50% at 24% 2%, rgba(0,170,255,0.4) 0%, rgba(0,150,255,0.18) 45%, transparent 70%),
+      radial-gradient(45% 50% at 24% 2%,
+        rgba(0,170,255,0.38) 0%,
+        rgba(0,165,255,0.26) 22%,
+        rgba(0,160,255,0.15) 42%,
+        rgba(0,155,255,0.07) 60%,
+        rgba(0,150,255,0.02) 80%,
+        transparent 100%),
       rgba(13,16,22,0.97);
     background-repeat: no-repeat;
-    background-size: 260% 160%, 100% 100%;
-    background-position: -30% 0%, 0 0;
-    animation: genie-drift 11s linear infinite;
+    background-size: 200% 200%, 100% 100%;
+    background-position: 90% 50%, 0 0;
+    animation: genie-drift 14s linear infinite;
   }
   @keyframes genie-drift {
-    0% { background-position: -30% 0%, 0 0; }
-    100% { background-position: 130% 0%, 0 0; }
+    0%    { background-position: 90% 50%, 0 0; }
+    12.5% { background-position: 78% 78%, 0 0; }
+    25%   { background-position: 50% 90%, 0 0; }
+    37.5% { background-position: 22% 78%, 0 0; }
+    50%   { background-position: 10% 50%, 0 0; }
+    62.5% { background-position: 22% 22%, 0 0; }
+    75%   { background-position: 50% 10%, 0 0; }
+    87.5% { background-position: 78% 22%, 0 0; }
+    100%  { background-position: 90% 50%, 0 0; }
   }
   .genie-scripts-loaded { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 16px; }
   .genie-chip { font-size: 12px; color: var(--muted); background: rgba(255,255,255,0.05); border: 1px solid var(--card-border); border-radius: 20px; padding: 4px 10px; }
@@ -1180,7 +1196,7 @@ async function refreshBookmarks() {
 
 function categoryHeaderHTML(cat, color) {
   return `
-    <span class="dot" style="background:${color}"></span>
+    <span class="dot" style="background:${color}; color:${color}"></span>
     <span class="category-name">${escapeHtml(cat.name)}</span>
     ${cat.id != null ? `<button class="icon-btn tiny rename-category" title="Rename category">${icon('edit', { size: 13 })}</button>
     <button class="icon-btn tiny delete-category" title="Delete category">${icon('close', { size: 13 })}</button>` : ''}
@@ -1623,7 +1639,7 @@ function renderVideoCategoryChecks() {
     row.innerHTML = `
       <label>
         <input type="checkbox" value="${key}" ${checked ? 'checked' : ''}/>
-        <span class="dot" style="background:${color}"></span>
+        <span class="dot" style="background:${color}; color:${color}"></span>
         <span class="category-name">${escapeHtml(cat.name)}</span>
       </label>
       ${cat.id != null ? `<button class="icon-btn tiny rename-category" title="Rename category">${icon('edit', { size: 13 })}</button>
