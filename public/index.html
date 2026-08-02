@@ -299,10 +299,10 @@
 
   .search-row { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; margin-bottom: 10px; }
   input[type="text"], select, input[type="number"] {
-    background: rgba(255,255,255,0.04);
+    background: rgba(255,255,255,0.08);
     backdrop-filter: var(--glass-blur);
     -webkit-backdrop-filter: var(--glass-blur);
-    border: 1px solid var(--card-border);
+    border: 1px solid var(--card-border-hover);
     color: var(--text);
     padding: 12px 14px;
     border-radius: 10px;
@@ -314,8 +314,8 @@
   input:-webkit-autofill:hover,
   input:-webkit-autofill:focus {
     -webkit-text-fill-color: var(--text);
-    -webkit-box-shadow: 0 0 0px 1000px rgba(255,255,255,0.04) inset;
-    box-shadow: 0 0 0px 1000px rgba(255,255,255,0.04) inset;
+    -webkit-box-shadow: 0 0 0px 1000px rgba(255,255,255,0.08) inset;
+    box-shadow: 0 0 0px 1000px rgba(255,255,255,0.08) inset;
     transition: background-color 5000s ease-in-out 0s;
   }
   #search-input { flex: 1; min-width: 260px; }
