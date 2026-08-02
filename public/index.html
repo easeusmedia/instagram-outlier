@@ -7,6 +7,8 @@
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
 <style>
+  @property --gx { syntax: '<percentage>'; inherits: false; initial-value: 24%; }
+  @property --gy { syntax: '<percentage>'; inherits: false; initial-value: 2%; }
   :root {
     --bg: #05070a;
     --card: rgba(255,255,255,0.035);
@@ -118,6 +120,11 @@
     transition: color .2s ease, border-color .2s ease, background .2s ease, box-shadow .25s ease;
   }
   .ghost-btn:hover { color: var(--text); border-color: rgba(255,255,255,0.32); background: rgba(0,0,0,0.25); box-shadow: var(--hover-glow); }
+
+  button:focus-visible, .icon-btn:focus-visible, .chip:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 2px rgba(0,170,255,0.45);
+  }
 
   .app-layout {
     display: grid;
@@ -266,28 +273,23 @@
     position: relative;
     overflow: hidden;
     background:
-      radial-gradient(45% 50% at 24% 2%,
+      radial-gradient(65% 65% at var(--gx, 24%) var(--gy, 2%),
         rgba(0,170,255,0.38) 0%,
-        rgba(0,165,255,0.26) 22%,
-        rgba(0,160,255,0.15) 42%,
-        rgba(0,155,255,0.07) 60%,
-        rgba(0,150,255,0.02) 80%,
+        rgba(0,160,255,0.2) 35%,
+        rgba(0,150,255,0.06) 65%,
         transparent 100%),
       rgba(13,16,22,0.97);
-    background-repeat: no-repeat;
-    background-size: 200% 200%, 100% 100%;
-    background-position: 0% 0%, 0 0;
     animation: genie-drift 22s linear infinite;
   }
   @keyframes genie-drift {
-    0%    { background-position: 0% 0%, 0 0; }
-    14%   { background-position: 20% 5%, 0 0; }
-    28%   { background-position: 30% 20%, 0 0; }
-    42%   { background-position: 20% 35%, 0 0; }
-    57%   { background-position: 0% 30%, 0 0; }
-    71%   { background-position: -15% 15%, 0 0; }
-    85%   { background-position: -10% -5%, 0 0; }
-    100%  { background-position: 0% 0%, 0 0; }
+    0%    { --gx: 24%; --gy: 2%; }
+    14%   { --gx: 40%; --gy: 8%; }
+    28%   { --gx: 50%; --gy: 25%; }
+    42%   { --gx: 40%; --gy: 42%; }
+    57%   { --gx: 20%; --gy: 38%; }
+    71%   { --gx: 2%; --gy: 22%; }
+    85%   { --gx: 8%; --gy: 5%; }
+    100%  { --gx: 24%; --gy: 2%; }
   }
   .genie-scripts-loaded { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 16px; }
   .genie-chip { font-size: 12px; color: var(--muted); background: rgba(255,255,255,0.05); border: 1px solid var(--card-border); border-radius: 20px; padding: 4px 10px; }
