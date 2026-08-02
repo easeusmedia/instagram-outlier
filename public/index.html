@@ -282,14 +282,11 @@
     animation: genie-drift 22s linear infinite;
   }
   @keyframes genie-drift {
-    0%    { --gx: 24%; --gy: 2%; }
-    14%   { --gx: 40%; --gy: 8%; }
-    28%   { --gx: 50%; --gy: 25%; }
-    42%   { --gx: 40%; --gy: 42%; }
-    57%   { --gx: 20%; --gy: 38%; }
-    71%   { --gx: 2%; --gy: 22%; }
-    85%   { --gx: 8%; --gy: 5%; }
-    100%  { --gx: 24%; --gy: 2%; }
+    0%    { --gx: 0%; --gy: 0%; }
+    25%   { --gx: 100%; --gy: 0%; }
+    50%   { --gx: 100%; --gy: 100%; }
+    75%   { --gx: 0%; --gy: 100%; }
+    100%  { --gx: 0%; --gy: 0%; }
   }
   .genie-scripts-loaded { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 16px; }
   .genie-chip { font-size: 12px; color: var(--muted); background: rgba(255,255,255,0.05); border: 1px solid var(--card-border); border-radius: 20px; padding: 4px 10px; }
