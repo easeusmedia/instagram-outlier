@@ -54,6 +54,19 @@ Paste both into `.env` (or your host's environment variable settings) alongside 
 
 > Note: switching from the local file to Turso starts with an empty database — bookmarks/cache built up locally don't carry over automatically.
 
+## Login gate (optional)
+
+The app has no login by default (fine for local use). To put a "Sign in with Google" gate in front of a public deployment — so random visitors can't burn your Apify credits — set these env vars on your host:
+
+```bash
+GOOGLE_CLIENT_ID=      # from a Google Cloud OAuth client (Web application type)
+GOOGLE_CLIENT_SECRET=
+ALLOWED_EMAILS=you@gmail.com,teammate@gmail.com   # comma-separated allowlist; leave blank to allow any Google account
+SESSION_SECRET=        # any random string; keeps you logged in across restarts
+```
+
+In the Google Cloud Console, add `https://your-app-url/auth/google/callback` as an authorized redirect URI on the OAuth client. With no `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET` set, the app behaves exactly as before — no login screen, nothing changes. This is a single allow/deny gate, not multi-user accounts — everyone who's allowed in shares the same data, same as today.
+
 ## Cost controls
 
 - `REELS_LIMIT` at the top of [server.js](server.js) is both the initial batch size and the "Load More" increment (default 15).

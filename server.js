@@ -4,6 +4,7 @@ import { createClient } from '@libsql/client';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import crypto from 'node:crypto';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -14,6 +15,56 @@ const PROFILE_ACTOR = 'apify~instagram-profile-scraper';
 const TRANSCRIPT_ACTOR = 'apple_yang~instagram-transcripts-scraper';
 const APIFY_TOKEN_ENV = process.env.APIFY_TOKEN || '';
 const PORT = process.env.PORT || 3000;
+// ------------------------------------------------------------------------
+
+// --- Google OAuth login gate -------------------------------------------
+// Only turns on when GOOGLE_CLIENT_ID/SECRET are set, so local dev stays
+// zero-setup. This is a single-tenant gate (allow/deny), not a multi-user
+// account system — the app has no per-user data model, so anything past
+// "is this a known Google account" would be unused complexity.
+const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || '';
+const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET || '';
+const ALLOWED_EMAILS = (process.env.ALLOWED_EMAILS || '')
+  .split(',').map((e) => e.trim().toLowerCase()).filter(Boolean);
+// ponytail: regenerated on every boot if unset, which logs everyone out on
+// deploy/restart. Set SESSION_SECRET in the environment to persist sessions.
+const SESSION_SECRET = process.env.SESSION_SECRET || crypto.randomBytes(32).toString('hex');
+const AUTH_ENABLED = !!(GOOGLE_CLIENT_ID && GOOGLE_CLIENT_SECRET);
+const SESSION_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
+
+function parseCookies(req) {
+  const header = req.headers.cookie || '';
+  return Object.fromEntries(header.split(';').filter(Boolean).map((part) => {
+    const i = part.indexOf('=');
+    return [part.slice(0, i).trim(), decodeURIComponent(part.slice(i + 1).trim())];
+  }));
+}
+function sign(value) {
+  return crypto.createHmac('sha256', SESSION_SECRET).update(value).digest('hex');
+}
+function safeEqual(a, b) {
+  const bufA = Buffer.from(a);
+  const bufB = Buffer.from(b);
+  return bufA.length === bufB.length && crypto.timingSafeEqual(bufA, bufB);
+}
+function makeSessionCookie(email) {
+  const payload = Buffer.from(JSON.stringify({ email, exp: Date.now() + SESSION_MAX_AGE_MS })).toString('base64url');
+  return `${payload}.${sign(payload)}`;
+}
+function verifySessionCookie(cookie) {
+  if (!cookie) return null;
+  const [payload, sig] = cookie.split('.');
+  if (!payload || !sig || !safeEqual(sig, sign(payload))) return null;
+  try {
+    const data = JSON.parse(Buffer.from(payload, 'base64url').toString());
+    return data.exp > Date.now() ? data.email : null;
+  } catch {
+    return null;
+  }
+}
+function oauthRedirectUri(req) {
+  return `${req.protocol}://${req.get('host')}/auth/google/callback`;
+}
 // ------------------------------------------------------------------------
 
 // Turso (libSQL) when TURSO_DATABASE_URL is set — this is what makes the app
@@ -349,6 +400,79 @@ function mergeReels(cachedNormalized, freshRawItems) {
 
 const app = express();
 app.use(express.json());
+
+app.get('/auth/google', (req, res) => {
+  const state = crypto.randomBytes(16).toString('hex');
+  res.setHeader('Set-Cookie', `oauth_state=${state}; HttpOnly; Path=/; Max-Age=600; SameSite=Lax`);
+  const params = new URLSearchParams({
+    client_id: GOOGLE_CLIENT_ID,
+    redirect_uri: oauthRedirectUri(req),
+    response_type: 'code',
+    scope: 'openid email',
+    state,
+    prompt: 'select_account',
+  });
+  res.redirect(`https://accounts.google.com/o/oauth2/v2/auth?${params}`);
+});
+
+app.get('/auth/google/callback', async (req, res) => {
+  const { code, state } = req.query;
+  const cookies = parseCookies(req);
+  if (!code || !state || state !== cookies.oauth_state) {
+    return res.status(400).send('Invalid or expired login attempt — go back and try again.');
+  }
+  try {
+    const tokenResp = await fetch('https://oauth2.googleapis.com/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        code,
+        client_id: GOOGLE_CLIENT_ID,
+        client_secret: GOOGLE_CLIENT_SECRET,
+        redirect_uri: oauthRedirectUri(req),
+        grant_type: 'authorization_code',
+      }),
+    });
+    const tokenData = await tokenResp.json();
+    if (!tokenResp.ok) throw new Error(tokenData.error_description || 'Google token exchange failed.');
+    const userResp = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+      headers: { Authorization: `Bearer ${tokenData.access_token}` },
+    });
+    const user = await userResp.json();
+    const email = (user.email || '').toLowerCase();
+    if (!email || !user.email_verified || (ALLOWED_EMAILS.length && !ALLOWED_EMAILS.includes(email))) {
+      return res.status(403).send('This Google account is not authorized to use this app.');
+    }
+    res.setHeader('Set-Cookie', [
+      'oauth_state=; Path=/; Max-Age=0',
+      `session=${makeSessionCookie(email)}; HttpOnly; Path=/; Max-Age=${SESSION_MAX_AGE_MS / 1000}; SameSite=Lax`,
+    ]);
+    res.redirect('/');
+  } catch (err) {
+    res.status(500).send(`Login failed: ${err.message}`);
+  }
+});
+
+app.get('/auth/logout', (req, res) => {
+  res.setHeader('Set-Cookie', 'session=; Path=/; Max-Age=0');
+  res.redirect('/login.html');
+});
+
+app.get('/api/me', (req, res) => {
+  const email = AUTH_ENABLED ? verifySessionCookie(parseCookies(req).session) : null;
+  res.json({ authEnabled: AUTH_ENABLED, email });
+});
+
+if (AUTH_ENABLED) {
+  app.use((req, res, next) => {
+    if (req.path.startsWith('/auth/') || req.path === '/login.html' || req.path === '/api/me') return next();
+    const email = verifySessionCookie(parseCookies(req).session);
+    if (email) return next();
+    if (req.path.startsWith('/api/')) return res.status(401).json({ error: 'Sign in required.' });
+    res.redirect('/login.html');
+  });
+}
+
 app.use(express.static(path.join(__dirname, 'public')));
 
 app.get('/api/creator', async (req, res) => {
