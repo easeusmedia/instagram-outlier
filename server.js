@@ -15,6 +15,10 @@ const PROFILE_ACTOR = 'apify~instagram-profile-scraper';
 const TRANSCRIPT_ACTOR = 'apple_yang~instagram-transcripts-scraper';
 const APIFY_TOKEN_ENV = process.env.APIFY_TOKEN || '';
 const PORT = process.env.PORT || 3000;
+// How often a cache hit is allowed to trigger a background "is there
+// anything new?" check, per creator. Bounds API cost from repeat searches
+// while still catching new uploads without the user asking for &refresh=1.
+const FRESHNESS_CHECK_COOLDOWN_MS = 30 * 60 * 1000;
 // ------------------------------------------------------------------------
 
 // --- Google OAuth login gate -------------------------------------------
@@ -104,6 +108,7 @@ await run(`CREATE TABLE IF NOT EXISTS video_categories (id INTEGER PRIMARY KEY A
 await run(`CREATE TABLE IF NOT EXISTS video_tags (shortcode TEXT PRIMARY KEY, category_id INTEGER)`);
 await run(`CREATE TABLE IF NOT EXISTS saved_videos (shortcode TEXT PRIMARY KEY, saved_at TEXT)`);
 await run(`CREATE TABLE IF NOT EXISTS scripts (id INTEGER PRIMARY KEY AUTOINCREMENT, shortcode TEXT, handle TEXT, content TEXT, created_at TEXT)`);
+await run(`CREATE TABLE IF NOT EXISTS creator_checks (handle TEXT PRIMARY KEY, checked_at TEXT)`);
 
 // Script Generator's LLM call is a plain OpenAI-compatible chat completion,
 // so any provider with that API shape works by just changing base URL/model.
@@ -136,6 +141,18 @@ async function upsertCreator(handle, profile) {
   await run(
     'INSERT INTO creators (handle, profile) VALUES (?, ?) ON CONFLICT(handle) DO UPDATE SET profile = excluded.profile',
     [handle, JSON.stringify(profile)]
+  );
+}
+
+async function getLastCheckedAt(handle) {
+  const row = await queryOne('SELECT checked_at FROM creator_checks WHERE handle = ?', [handle]);
+  return row ? new Date(row.checked_at).getTime() : 0;
+}
+
+async function markChecked(handle) {
+  await run(
+    'INSERT INTO creator_checks (handle, checked_at) VALUES (?, ?) ON CONFLICT(handle) DO UPDATE SET checked_at = excluded.checked_at',
+    [handle, new Date().toISOString()]
   );
 }
 
@@ -406,6 +423,37 @@ function mergeReels(cachedNormalized, freshRawItems) {
   return computeOutlierScores(merged);
 }
 
+// Fired (not awaited) after a cache-hit response has already gone out, so it
+// never slows the request down. Does the cheapest possible Apify call — one
+// reel — to see if the creator has posted anything since we last cached
+// them; only pays for a full re-scrape when there's actually something new
+// to merge in. Skipped entirely if we checked this creator recently, to
+// bound API cost from repeat searches.
+async function checkForNewReelsInBackground(handle, cachedReels, limit) {
+  try {
+    if (Date.now() - (await getLastCheckedAt(handle)) < FRESHNESS_CHECK_COOLDOWN_MS) return;
+    await markChecked(handle);
+
+    // maxItems must clear Apify's minimum-run-cost floor for this actor
+    // (same reason resolveOwnerFromPost uses 5, not 1) — resultsLimit still
+    // caps what's actually scraped to just the newest reel.
+    const [latest] = (await callApify(REEL_ACTOR, { username: [handle], resultsLimit: 1 }, 5)) || [];
+    if (!latest) return;
+
+    const newest = cachedReels[0]; // reels are stored newest-first
+    const latestTime = latest.timestamp ? new Date(latest.timestamp).getTime() : 0;
+    const newestCachedTime = newest?.timestamp ? new Date(newest.timestamp).getTime() : 0;
+    if (!latest.shortCode || latest.shortCode === newest?.shortCode || latestTime <= newestCachedTime) {
+      return; // nothing new
+    }
+
+    const reelItems = await callApify(REEL_ACTOR, { username: [handle], resultsLimit: limit }, limit);
+    await upsertReels(handle, mergeReels(cachedReels, reelItems || []));
+  } catch (err) {
+    console.error(`Background freshness check failed for ${handle}:`, err.message);
+  }
+}
+
 // --- app --------------------------------------------------------------
 
 const app = express();
@@ -499,6 +547,7 @@ app.get('/api/creator', async (req, res) => {
 
     let profile = forceRefresh ? null : await getCreatorProfile(handle);
     let reels = forceRefresh ? null : await getCreatorReels(handle);
+    let freshlyScraped = false;
 
     if (!profile || !reels) {
       // Nothing cached yet (or a forced refresh): scrape from scratch.
@@ -522,6 +571,7 @@ app.get('/api/creator', async (req, res) => {
 
       await upsertCreator(handle, profile);
       await upsertReels(handle, reels);
+      freshlyScraped = true;
     } else if (reels.length < requestedLimit) {
       // "Load More": cache doesn't have enough yet, re-scrape at the bigger size.
       const reelItems = await callApify(
@@ -531,12 +581,18 @@ app.get('/api/creator', async (req, res) => {
       );
       reels = mergeReels(reels, reelItems || []);
       await upsertReels(handle, reels);
+      freshlyScraped = true;
     }
     // else: cache already covers what was asked for — serve it as-is, no
-    // Apify call. Append &refresh=1 to force a fresh scrape for new uploads.
+    // Apify call now. A background check (below) looks for new uploads
+    // instead, so the response stays instant either way.
 
-    reels = await attachCachedTranscripts(reels);
-    res.json({ profile, reels, bookmarked: await isBookmarked(handle), hasMore: reels.length >= requestedLimit });
+    const withTranscripts = await attachCachedTranscripts(reels);
+    res.json({ profile, reels: withTranscripts, bookmarked: await isBookmarked(handle), hasMore: withTranscripts.length >= requestedLimit });
+
+    if (!freshlyScraped && !forceRefresh) {
+      checkForNewReelsInBackground(handle, reels, requestedLimit);
+    }
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: err.message || 'Something went wrong.' });
