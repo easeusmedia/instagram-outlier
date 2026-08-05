@@ -14,6 +14,7 @@
     --card-border: rgba(255,255,255,0.09);
     --card-border-hover: rgba(255,255,255,0.18);
     --accent: #00AAFF;
+    --accent-dim: rgba(0,170,255,0.4);
     --text: #EDF1F7;
     --muted: #8A93A3;
     --muted-dim: #5b6472;
@@ -48,6 +49,7 @@
     transition: color .2s, border-color .2s, background .2s, box-shadow .25s;
   }
   .icon-btn:hover { color: var(--text); border-color: var(--card-border-hover); background: rgba(0,0,0,0.2); }
+  .icon-btn.tiny { width: 26px; height: 26px; border-radius: 8px; }
   .icon { vertical-align: -3px; flex-shrink: 0; position: static !important; }
 
   button.primary {
@@ -66,49 +68,93 @@
   }
   button.secondary:hover { background: rgba(0,0,0,0.25); box-shadow: var(--hover-glow); }
   button.secondary.active { background: var(--accent); border-color: var(--accent); color: #04121c; }
+  button.ghost {
+    background: transparent; border: 1px dashed var(--card-border-hover); color: var(--muted);
+    padding: 8px 14px; border-radius: 9px; font-size: 12px; font-weight: 600;
+  }
+  button.ghost:hover { color: var(--text); border-color: var(--card-border-hover); }
 
   input[type="text"], textarea {
     background: rgba(255,255,255,0.08); border: 1px solid var(--card-border-hover); color: var(--text);
     padding: 10px 12px; border-radius: 9px; font-size: 13px; width: 100%;
   }
   input[type="text"]:focus, textarea:focus { outline: none; border-color: var(--accent); }
+  input[type="checkbox"] { accent-color: var(--accent); width: 15px; height: 15px; cursor: pointer; }
+
+  /* --- modal system (shared by name/rename/track) ---------------------- */
+  .modal-overlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.6); display: none;
+    align-items: center; justify-content: center; z-index: 200;
+  }
+  .modal-overlay.open { display: flex; }
+  .modal {
+    background: rgba(14,17,23,0.95); backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur);
+    border: 1px solid var(--card-border); border-radius: 16px; padding: 24px; width: 380px;
+    max-width: calc(100vw - 40px); box-shadow: inset 0 1px 0 rgba(255,255,255,0.06), 0 20px 60px rgba(0,0,0,0.5);
+  }
+  .modal h3 { margin: 0 0 4px; font-size: 16px; }
+  .modal .modal-desc { color: var(--muted); font-size: 12.5px; margin: 0 0 16px; }
+  .modal .field { margin-bottom: 14px; }
+  .modal .field label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; display: block; margin-bottom: 6px; }
+  .modal-actions { display: flex; gap: 8px; margin-top: 18px; }
+  .modal-actions button { flex: 1; }
+  .category-pick-list { display: flex; flex-direction: column; gap: 6px; max-height: 180px; overflow-y: auto; margin-bottom: 10px; }
+  .category-pick { display: flex; align-items: center; gap: 8px; padding: 9px 12px; border-radius: 9px; border: 1px solid var(--card-border); cursor: pointer; font-size: 13px; }
+  .category-pick:hover { border-color: var(--card-border-hover); }
+  .category-pick.selected { border-color: var(--accent); background: rgba(0,170,255,0.08); }
+  .new-cat-row { display: flex; gap: 8px; }
+  .new-cat-row input { flex: 1; }
+
+  /* --- dropdown menu (3-dot) ------------------------------------------- */
+  .dropdown-menu {
+    position: fixed; background: rgba(20,23,28,0.98); border: 1px solid var(--card-border-hover);
+    border-radius: 10px; padding: 6px; min-width: 150px; z-index: 210; display: none;
+    box-shadow: 0 12px 30px rgba(0,0,0,0.5); backdrop-filter: var(--glass-blur);
+  }
+  .dropdown-menu.open { display: block; }
+  .dropdown-menu button {
+    display: flex; align-items: center; gap: 8px; width: 100%; background: none; border: none; color: var(--text);
+    padding: 8px 10px; border-radius: 7px; font-size: 13px; text-align: left; font-weight: 500;
+  }
+  .dropdown-menu button:hover { background: rgba(255,255,255,0.06); }
+  .dropdown-menu button.danger { color: var(--danger); }
 
   /* --- spaces landing view ------------------------------------------- */
   #spaces-view { height: 100%; overflow-y: auto; padding: 40px; }
-  .spaces-header { display: flex; align-items: center; justify-content: space-between; max-width: 900px; margin: 0 auto 28px; }
+  .spaces-header { display: flex; align-items: center; justify-content: center; position: relative; max-width: 1000px; margin: 0 auto 40px; }
   .spaces-header h1 { font-size: 22px; margin: 0; }
-  .spaces-header h1 a { color: var(--muted); text-decoration: none; font-size: 14px; margin-left: 14px; }
-  .spaces-grid { max-width: 900px; margin: 0 auto; display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 14px; }
+  .spaces-header .back-link { position: absolute; right: 0; color: var(--muted); text-decoration: none; font-size: 13px; }
+  .create-hero { max-width: 1000px; margin: 0 auto 44px; display: flex; justify-content: center; }
+  .create-hero button {
+    display: flex; align-items: center; gap: 10px; font-size: 15px; padding: 16px 34px;
+    border-radius: 14px; border: 1px dashed var(--card-border-hover); background: rgba(255,255,255,0.03); color: var(--text); font-weight: 700;
+  }
+  .create-hero button:hover { border-color: var(--accent); box-shadow: var(--hover-glow); }
+  .spaces-grid { max-width: 1000px; margin: 0 auto; display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 14px; }
   .space-card {
     background: var(--card); border: 1px solid var(--card-border); border-radius: 14px; padding: 18px;
     cursor: pointer; transition: border-color .2s, background .2s; position: relative;
   }
   .space-card:hover { border-color: var(--card-border-hover); background: rgba(255,255,255,0.05); }
-  .space-card h3 { margin: 0 0 6px; font-size: 15px; }
+  .space-card h3 { margin: 0 0 6px; font-size: 15px; padding-right: 20px; }
   .space-card .date { color: var(--muted); font-size: 12px; }
-  .space-card .del { position: absolute; top: 10px; right: 10px; opacity: 0; width: 26px; height: 26px; }
-  .space-card:hover .del { opacity: 1; }
-  .space-card.new-space {
-    display: flex; align-items: center; justify-content: center; gap: 8px; color: var(--muted);
-    border-style: dashed; font-weight: 600; font-size: 13px;
-  }
-  .space-card.new-space:hover { color: var(--text); }
-  .empty-note { color: var(--muted); font-size: 13px; grid-column: 1 / -1; text-align: center; padding: 40px 0; }
+  .space-card .menu-btn { position: absolute; top: 10px; right: 10px; width: 26px; height: 26px; }
+  .empty-note { color: var(--muted); font-size: 13px; grid-column: 1 / -1; text-align: center; padding: 20px 0; }
 
   /* --- canvas view ----------------------------------------------------- */
   #canvas-view { height: 100%; display: flex; flex-direction: column; }
   .canvas-header {
-    display: flex; align-items: center; gap: 14px; padding: 14px 20px;
+    display: flex; align-items: center; gap: 10px; padding: 14px 20px;
     background: rgba(5,7,10,0.75); backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur);
     border-bottom: 1px solid var(--card-border); flex-shrink: 0; z-index: 5;
   }
   .canvas-header .brand { font-weight: 700; font-size: 15px; }
   .canvas-header .brand span { color: var(--accent); }
   .canvas-header h2 { font-size: 15px; margin: 0; font-weight: 600; }
-  .canvas-header .save-status { color: var(--muted-dim); font-size: 12px; margin-left: auto; }
+  .canvas-header .save-status { color: var(--muted-dim); font-size: 12px; margin-left: auto; margin-right: 4px; }
 
-  .canvas-layout { flex: 1; display: flex; min-height: 0; }
-  #drawflow { flex: 1; position: relative; background: var(--bg); }
+  .canvas-layout { flex: 1; display: flex; min-height: 0; position: relative; }
+  #drawflow { flex: 1; position: relative; background: var(--bg); overflow: hidden; }
   .parent-drawflow { background: transparent !important; }
   /* Drawflow's own stylesheet uses nested selectors like ".drawflow .drawflow-node",
      which beats a bare ".drawflow-node" override on specificity regardless of CSS
@@ -122,7 +168,10 @@
     color: var(--text); padding: 0; width: auto; box-shadow: 0 10px 30px rgba(0,0,0,0.45);
     backdrop-filter: blur(12px);
   }
-  .drawflow .drawflow-node.selected { border-color: var(--accent); box-shadow: 0 0 0 2px rgba(0,170,255,0.3), 0 10px 30px rgba(0,0,0,0.45); }
+  .drawflow .drawflow-node.selected {
+    background: rgba(14,17,23,0.96); border-color: var(--accent);
+    box-shadow: 0 0 0 2px rgba(0,170,255,0.3), 0 10px 30px rgba(0,0,0,0.45);
+  }
   .drawflow .drawflow-node:hover { cursor: move; }
   .drawflow .drawflow-node .drawflow_content_node { width: 100%; }
   .drawflow .drawflow-node .input, .drawflow .drawflow-node .output {
@@ -132,22 +181,55 @@
   .drawflow .drawflow-node .output { right: -7px; }
   .drawflow .connection .main-path { stroke: rgba(0,170,255,0.6); stroke-width: 2.5px; }
   .drawflow .connection .main-path:hover { stroke: var(--accent); }
-  .drawflow .connection .main-path.selected { stroke: #34d399; }
+  .drawflow .connection .main-path.selected { stroke: var(--accent); stroke-width: 3.5px; }
   .drawflow-delete {
     background: rgba(20,20,24,0.95) !important; color: var(--text) !important; border: 1px solid var(--card-border-hover) !important;
     width: 22px !important; height: 22px !important; border-radius: 50% !important; font-size: 12px !important; line-height: 20px !important;
     top: -11px !important; right: -11px !important;
   }
 
-  .video-node { width: 200px; }
-  .video-node .thumb { width: 100%; height: 150px; object-fit: cover; border-radius: 14px 14px 0 0; display: block; background: rgba(255,255,255,0.04); pointer-events: none; }
+  /* Always-visible-on-hover remove button, shared across every custom node
+     type — the built-in Drawflow delete-on-select control is easy to miss,
+     so every node gets an explicit one. */
+  .node-card { position: relative; }
+  .node-remove {
+    position: absolute; top: -8px; right: -8px; width: 22px; height: 22px; border-radius: 50%;
+    background: rgba(20,20,24,0.95); border: 1px solid var(--card-border-hover); color: var(--text);
+    display: flex; align-items: center; justify-content: center; opacity: 0; transition: opacity .15s; z-index: 10;
+  }
+  .node-card:hover .node-remove { opacity: 1; }
+  .node-remove:hover { border-color: var(--danger); color: var(--danger); }
+
+  .video-node { width: 220px; }
+  .video-node .thumb-wrap { position: relative; width: 100%; height: 160px; border-radius: 14px 14px 0 0; overflow: hidden; background: rgba(255,255,255,0.04); }
+  .video-node .thumb-wrap img, .video-node .thumb-wrap video { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .video-node .play-btn {
+    position: absolute; inset: 0; margin: auto; width: 40px; height: 40px; border-radius: 50%;
+    background: rgba(0,0,0,0.55); border: none; color: #fff; display: flex; align-items: center; justify-content: center;
+  }
   .video-node .score {
     position: absolute; top: 8px; left: 8px; background: rgba(0,0,0,0.6); color: #fff; font-size: 11px; font-weight: 700;
-    padding: 3px 7px; border-radius: 6px;
+    padding: 3px 7px; border-radius: 6px; z-index: 2;
   }
   .video-node .body { padding: 10px 12px 12px; }
   .video-node .handle { font-size: 12px; font-weight: 600; color: var(--accent); }
   .video-node .views { font-size: 11px; color: var(--muted); margin-top: 2px; }
+  .video-node .node-actions { display: flex; gap: 6px; margin-top: 8px; }
+  .video-node .node-actions button { flex: 1; font-size: 11px; padding: 6px 8px; }
+
+  .group-node { width: 240px; }
+  .group-node .head { display: flex; align-items: center; gap: 6px; padding: 10px 12px; border-bottom: 1px solid var(--card-border); }
+  .group-node .head .name { font-weight: 700; font-size: 13px; flex: 1; }
+  .group-node .head input.rename-input { display: none; }
+  .group-node .items { max-height: 220px; overflow-y: auto; padding: 8px 10px; display: flex; flex-direction: column; gap: 6px; }
+  .group-node .item { display: flex; gap: 8px; align-items: center; font-size: 11.5px; color: var(--muted); }
+  .group-node .item img { width: 30px; height: 40px; object-fit: cover; border-radius: 4px; flex-shrink: 0; }
+  .group-node .item .item-handle { color: var(--text); font-weight: 600; }
+  .group-node .count { font-size: 11px; color: var(--muted); padding: 6px 12px 10px; }
+
+  .script-node { width: 260px; }
+  .script-node .head { display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-bottom: 1px solid var(--card-border); font-weight: 700; font-size: 13px; }
+  .script-node .text { max-height: 200px; overflow-y: auto; padding: 10px 12px; font-size: 11.5px; line-height: 1.5; color: var(--muted); white-space: pre-wrap; }
 
   .chat-node { width: 320px; }
   .chat-node .head { display: flex; align-items: center; gap: 8px; padding: 12px 14px; border-bottom: 1px solid var(--card-border); font-weight: 700; font-size: 13px; }
@@ -159,36 +241,83 @@
   .chat-node .status { font-size: 11px; color: var(--muted); min-height: 14px; }
   .chat-node .status.error { color: var(--danger); }
 
+  /* --- bottom toolbar (Figma-style zoom controls) ----------------------- */
+  .bottom-toolbar {
+    position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%);
+    display: flex; align-items: center; gap: 4px; background: rgba(14,17,23,0.92);
+    border: 1px solid var(--card-border-hover); border-radius: 14px; padding: 6px;
+    box-shadow: 0 12px 30px rgba(0,0,0,0.5); backdrop-filter: var(--glass-blur); z-index: 20;
+  }
+  .bottom-toolbar .zoom-pct { font-size: 12px; color: var(--muted); width: 46px; text-align: center; user-select: none; }
+  .bottom-toolbar .sep { width: 1px; height: 20px; background: var(--card-border-hover); margin: 0 4px; }
+
   /* --- search panel ------------------------------------------------- */
   .search-panel {
-    width: 340px; flex-shrink: 0; background: var(--card); border-left: 1px solid var(--card-border);
-    display: flex; flex-direction: column; overflow: hidden;
+    width: 440px; flex-shrink: 0; background: var(--card); border-left: 1px solid var(--card-border);
+    display: flex; flex-direction: column; overflow: hidden; transition: margin-right .25s ease;
   }
-  .search-panel .panel-head { padding: 16px 16px 0; }
-  .search-panel .search-row { display: flex; gap: 8px; margin-bottom: 10px; }
-  .search-panel .sort-row { display: flex; gap: 8px; margin-bottom: 14px; }
-  .search-panel .sort-row button { flex: 1; }
-  .search-panel .status { color: var(--muted); font-size: 12px; padding: 0 16px 10px; min-height: 14px; }
-  .search-panel .status.error { color: var(--danger); }
-  .search-results { flex: 1; overflow-y: auto; padding: 0 16px 16px; display: flex; flex-direction: column; gap: 10px; }
-  .search-card {
-    display: flex; gap: 10px; background: rgba(255,255,255,0.03); border: 1px solid var(--card-border);
-    border-radius: 10px; padding: 8px; cursor: grab; transition: border-color .2s, box-shadow .2s;
+  .search-panel.collapsed { margin-right: -440px; }
+  .panel-toggle-btn { flex-shrink: 0; }
+
+  .panel-scroll { flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 18px; }
+
+  .tracked-section .section-title { font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); margin-bottom: 8px; }
+  .tracked-cat { border: 1px solid var(--card-border); border-radius: 10px; margin-bottom: 8px; overflow: hidden; }
+  .tracked-cat-head { display: flex; align-items: center; gap: 8px; padding: 10px 12px; cursor: pointer; font-size: 12.5px; font-weight: 600; }
+  .tracked-cat-head .chev { transition: transform .15s; color: var(--muted); }
+  .tracked-cat.open .chev { transform: rotate(90deg); }
+  .tracked-cat-body { display: none; padding: 4px 12px 10px; }
+  .tracked-cat.open .tracked-cat-body { display: block; }
+  .tracked-creator-row { display: flex; align-items: center; gap: 8px; padding: 6px 0; font-size: 12.5px; }
+  .tracked-creator-row img { width: 20px; height: 20px; border-radius: 50%; object-fit: cover; background: rgba(255,255,255,0.06); }
+
+  .search-row { display: flex; gap: 8px; margin-bottom: 8px; }
+  .search-actions-row { display: flex; gap: 8px; margin-bottom: 8px; }
+  .search-actions-row button { flex: 1; }
+  .sort-row { display: flex; gap: 8px; }
+  .sort-row button { flex: 1; }
+  .status { color: var(--muted); font-size: 12px; min-height: 14px; }
+  .status.error { color: var(--danger); }
+
+  .results-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .video-card {
+    background: rgba(255,255,255,0.03); border: 1px solid var(--card-border); border-radius: 12px; overflow: hidden;
+    cursor: grab; transition: border-color .2s, box-shadow .2s; position: relative;
   }
-  .search-card:hover { border-color: var(--accent); box-shadow: var(--hover-glow); }
-  .search-card.dragging { opacity: 0.4; }
-  .search-card img { width: 52px; height: 68px; object-fit: cover; border-radius: 6px; flex-shrink: 0; background: rgba(255,255,255,0.05); }
-  .search-card .info { min-width: 0; }
-  .search-card .cap { font-size: 12px; color: var(--text); line-height: 1.35; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
-  .search-card .meta { font-size: 11px; color: var(--muted); margin-top: 4px; display: flex; gap: 8px; }
-  .search-card .meta .score { color: var(--accent); font-weight: 700; }
+  .video-card:hover { border-color: var(--accent); box-shadow: var(--hover-glow); }
+  .video-card.dragging { opacity: 0.4; }
+  .video-card .check {
+    position: absolute; top: 6px; left: 6px; z-index: 3; width: 18px; height: 18px;
+  }
+  .video-card .thumb-wrap { position: relative; width: 100%; aspect-ratio: 3/4; background: rgba(255,255,255,0.04); }
+  .video-card .thumb-wrap img, .video-card .thumb-wrap video { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .video-card .score-badge {
+    position: absolute; top: 6px; right: 6px; background: rgba(0,0,0,0.6); color: var(--accent); font-size: 10.5px; font-weight: 700;
+    padding: 2px 6px; border-radius: 6px; z-index: 2;
+  }
+  .video-card .play-btn {
+    position: absolute; inset: 0; margin: auto; width: 34px; height: 34px; border-radius: 50%;
+    background: rgba(0,0,0,0.55); border: none; color: #fff; display: flex; align-items: center; justify-content: center; z-index: 2;
+  }
+  .video-card .add-btn {
+    position: absolute; bottom: 6px; right: 6px; width: 26px; height: 26px; border-radius: 50%;
+    background: var(--accent); color: #04121c; border: none; display: flex; align-items: center; justify-content: center;
+    opacity: 0; transition: opacity .15s; z-index: 3;
+  }
+  .video-card:hover .add-btn { opacity: 1; }
+  .video-card .info { padding: 7px 8px; font-size: 11px; color: var(--muted); }
+  .video-card .info .views { margin-top: 2px; }
 </style>
 </head>
 <body>
 
 <div id="spaces-view">
   <div class="spaces-header">
-    <h1>Instagram Outlier <a href="/">&larr; back to base app</a></h1>
+    <h1>Instagram <span style="color:var(--accent)">Outlier</span></h1>
+    <a class="back-link" href="/">&larr; back to base app</a>
+  </div>
+  <div class="create-hero">
+    <button id="create-space-btn">+ Create new space</button>
   </div>
   <div class="spaces-grid" id="spaces-grid"></div>
 </div>
@@ -198,25 +327,80 @@
     <button class="icon-btn" id="back-btn" title="Back to spaces"></button>
     <div class="brand">Instagram <span>Outlier</span></div>
     <h2 id="space-name"></h2>
+    <button class="icon-btn tiny" id="rename-space-btn" title="Rename space"></button>
     <div class="save-status" id="save-status"></div>
+    <button class="icon-btn" id="panel-toggle-btn" title="Toggle creator panel"></button>
   </div>
   <div class="canvas-layout">
-    <div id="drawflow"></div>
-    <aside class="search-panel">
-      <div class="panel-head">
-        <div class="search-row">
-          <input type="text" id="search-input" placeholder="Search a creator…" />
-          <button class="primary" id="search-btn">Go</button>
-        </div>
-        <div class="sort-row">
-          <button class="secondary active" id="sort-outlier">Outlier</button>
-          <button class="secondary" id="sort-latest">Latest</button>
-        </div>
+    <div id="drawflow">
+      <div class="bottom-toolbar">
+        <button class="icon-btn tiny" id="zoom-out-btn" title="Zoom out"></button>
+        <div class="zoom-pct" id="zoom-pct">100%</div>
+        <button class="icon-btn tiny" id="zoom-in-btn" title="Zoom in"></button>
+        <div class="sep"></div>
+        <button class="icon-btn tiny" id="zoom-fit-btn" title="Reset view"></button>
       </div>
-      <div class="status" id="search-status"></div>
-      <div class="search-results" id="search-results"></div>
+    </div>
+    <aside class="search-panel" id="search-panel">
+      <div class="panel-scroll">
+        <div class="tracked-section">
+          <div class="section-title">Tracked Categories</div>
+          <div id="tracked-cats"></div>
+        </div>
+        <div class="search-section">
+          <div class="section-title">Search a Creator</div>
+          <div class="search-row">
+            <input type="text" id="search-input" placeholder="Username…" />
+            <button class="primary" id="search-btn">Go</button>
+          </div>
+          <div class="search-actions-row" id="track-row" style="display:none">
+            <button class="secondary" id="track-btn">+ Track this creator</button>
+          </div>
+          <div class="sort-row">
+            <button class="secondary active" id="sort-outlier">Outlier</button>
+            <button class="secondary" id="sort-latest">Latest</button>
+          </div>
+        </div>
+        <div class="status" id="search-status"></div>
+        <div class="results-grid" id="search-results"></div>
+        <button class="ghost" id="load-more-btn" style="display:none">Load 15 more</button>
+      </div>
     </aside>
   </div>
+</div>
+
+<div class="modal-overlay" id="name-modal">
+  <div class="modal">
+    <h3 id="name-modal-title">Name this space</h3>
+    <p class="modal-desc" id="name-modal-desc"></p>
+    <div class="field"><input type="text" id="name-modal-input" placeholder="e.g. Script 1" /></div>
+    <div class="modal-actions">
+      <button class="secondary" id="name-modal-cancel">Cancel</button>
+      <button class="primary" id="name-modal-ok">Create</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="track-modal">
+  <div class="modal">
+    <h3>Track <span id="track-modal-handle"></span></h3>
+    <p class="modal-desc">Pick a category to keep this creator organized, or create a new one.</p>
+    <div class="category-pick-list" id="track-cat-list"></div>
+    <div class="new-cat-row">
+      <input type="text" id="track-new-cat-input" placeholder="New category name" />
+      <button class="secondary" id="track-new-cat-btn">Add</button>
+    </div>
+    <div class="modal-actions">
+      <button class="secondary" id="track-modal-cancel">Cancel</button>
+      <button class="primary" id="track-modal-ok">Track</button>
+    </div>
+  </div>
+</div>
+
+<div class="dropdown-menu" id="space-menu">
+  <button id="space-menu-rename">Rename</button>
+  <button id="space-menu-duplicate">Duplicate</button>
+  <button class="danger" id="space-menu-delete">Delete</button>
 </div>
 
 <script src="https://cdn.jsdelivr.net/gh/jerosoler/Drawflow/dist/drawflow.min.js"></script>
@@ -228,11 +412,25 @@ const ICONS = {
   back: '<line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/>',
   sparkle: '<path d="M12 2l1.8 5.2L19 9l-5.2 1.8L12 16l-1.8-5.2L5 9l5.2-1.8L12 2z" fill="currentColor" stroke="none"/><path d="M19 15l.9 2.6 2.6.9-2.6.9L19 22l-.9-2.6-2.6-.9 2.6-.9L19 15z" fill="currentColor" stroke="none" opacity="0.7"/>',
   plus: '<line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>',
+  edit: '<path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/>',
+  more: '<circle cx="12" cy="5" r="1.5" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.5" fill="currentColor" stroke="none"/><circle cx="12" cy="19" r="1.5" fill="currentColor" stroke="none"/>',
+  panel: '<rect x="3" y="4" width="18" height="16" rx="2"/><line x1="15" y1="4" x2="15" y2="20"/>',
+  zoomIn: '<circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/>',
+  zoomOut: '<circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="8" y1="11" x2="14" y2="11"/>',
+  fit: '<path d="M8 3H5a2 2 0 0 0-2 2v3M16 3h3a2 2 0 0 1 2 2v3M21 16v3a2 2 0 0 1-2 2h-3M8 21H5a2 2 0 0 1-2-2v-3"/>',
+  chev: '<polyline points="9 18 15 12 9 6"/>',
+  play: '<polygon points="6 3 20 12 6 21 6 3" fill="currentColor" stroke="none"/>',
 };
 function icon(name, { size = 16 } = {}) {
   return `<svg class="icon" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${ICONS[name]}</svg>`;
 }
 $('back-btn').innerHTML = icon('back', { size: 18 });
+$('rename-space-btn').innerHTML = icon('edit', { size: 13 });
+$('panel-toggle-btn').innerHTML = icon('panel', { size: 18 });
+$('zoom-in-btn').innerHTML = icon('zoomIn', { size: 15 });
+$('zoom-out-btn').innerHTML = icon('zoomOut', { size: 15 });
+$('zoom-fit-btn').innerHTML = icon('fit', { size: 15 });
+$('name-modal-cancel').textContent = 'Cancel';
 
 async function fetchJSON(url, opts = {}) {
   const res = await fetch(url, {
@@ -258,6 +456,73 @@ function imgFallback(el) {
     '<svg xmlns="http://www.w3.org/2000/svg" width="52" height="68"><rect width="100%" height="100%" fill="#0d1117"/></svg>'
   );
 }
+function playInline(wrap, reel) {
+  wrap.innerHTML = '';
+  const video = document.createElement('video');
+  video.src = reel.videoUrl;
+  video.controls = true;
+  video.autoplay = true;
+  video.playsInline = true;
+  video.setAttribute('referrerpolicy', 'no-referrer');
+  video.onerror = () => { wrap.innerHTML = `<img src="${proxied(reel.thumbnail)}" onerror="imgFallback(this)" />`; };
+  wrap.appendChild(video);
+}
+
+// --- tiny modal helpers ---------------------------------------------------
+
+function openNameModal({ title, desc = '', placeholder = '', value = '', okLabel = 'Create' }) {
+  return new Promise((resolve) => {
+    $('name-modal-title').textContent = title;
+    $('name-modal-desc').textContent = desc;
+    $('name-modal-desc').style.display = desc ? 'block' : 'none';
+    const input = $('name-modal-input');
+    input.placeholder = placeholder;
+    input.value = value;
+    $('name-modal-ok').textContent = okLabel;
+    $('name-modal').classList.add('open');
+    setTimeout(() => input.focus(), 0);
+
+    function cleanup(result) {
+      $('name-modal').classList.remove('open');
+      $('name-modal-ok').removeEventListener('click', onOk);
+      $('name-modal-cancel').removeEventListener('click', onCancel);
+      input.removeEventListener('keydown', onKey);
+      resolve(result);
+    }
+    function onOk() { cleanup(input.value.trim() || null); }
+    function onCancel() { cleanup(null); }
+    function onKey(e) { if (e.key === 'Enter') onOk(); if (e.key === 'Escape') onCancel(); }
+    $('name-modal-ok').addEventListener('click', onOk);
+    $('name-modal-cancel').addEventListener('click', onCancel);
+    input.addEventListener('keydown', onKey);
+  });
+}
+
+let openDropdownCloser = null;
+function openDropdown(anchorEl, items) {
+  if (openDropdownCloser) openDropdownCloser();
+  const menu = $('space-menu');
+  menu.innerHTML = '';
+  items.forEach((it) => {
+    const btn = document.createElement('button');
+    if (it.danger) btn.className = 'danger';
+    btn.textContent = it.label;
+    btn.addEventListener('click', () => { close(); it.onClick(); });
+    menu.appendChild(btn);
+  });
+  const rect = anchorEl.getBoundingClientRect();
+  menu.style.top = `${rect.bottom + 6}px`;
+  menu.style.left = `${Math.min(rect.left, window.innerWidth - 170)}px`;
+  menu.classList.add('open');
+  function close() {
+    menu.classList.remove('open');
+    document.removeEventListener('click', onDocClick, true);
+    openDropdownCloser = null;
+  }
+  function onDocClick(e) { if (!menu.contains(e.target) && e.target !== anchorEl) close(); }
+  setTimeout(() => document.addEventListener('click', onDocClick, true), 0);
+  openDropdownCloser = close;
+}
 
 // --- spaces landing view -------------------------------------------------
 
@@ -266,22 +531,12 @@ async function loadSpacesView() {
   const grid = $('spaces-grid');
   grid.innerHTML = '';
 
-  const newCard = document.createElement('div');
-  newCard.className = 'space-card new-space';
-  newCard.innerHTML = `${icon('plus', { size: 18 })} Create new space`;
-  newCard.addEventListener('click', async () => {
-    const name = prompt('Name this space:');
-    if (!name || !name.trim()) return;
-    const { id } = await fetchJSON('/api/spaces', { method: 'POST', body: { name: name.trim() } });
-    location.href = `/v1?space=${id}`;
-  });
-  grid.appendChild(newCard);
-
   if (!spaces.length) {
     const note = document.createElement('div');
     note.className = 'empty-note';
     note.textContent = 'No spaces yet — create one to start building a script canvas.';
     grid.appendChild(note);
+    return;
   }
 
   spaces.forEach((s) => {
@@ -290,43 +545,191 @@ async function loadSpacesView() {
     card.innerHTML = `
       <h3>${escapeHtml(s.name)}</h3>
       <div class="date">${new Date(s.created_at).toLocaleDateString()}</div>
-      <button class="icon-btn del" title="Delete space">${icon('close', { size: 12 })}</button>
+      <button class="icon-btn tiny menu-btn" title="More">${icon('more', { size: 14 })}</button>
     `;
     card.addEventListener('click', () => { location.href = `/v1?space=${s.id}`; });
-    card.querySelector('.del').addEventListener('click', async (e) => {
+    card.querySelector('.menu-btn').addEventListener('click', (e) => {
       e.stopPropagation();
-      if (!confirm(`Delete "${s.name}"? This can't be undone.`)) return;
-      await fetchJSON(`/api/spaces/${s.id}`, { method: 'DELETE' });
-      loadSpacesView();
+      openDropdown(e.currentTarget, [
+        { label: 'Rename', onClick: async () => {
+          const name = await openNameModal({ title: 'Rename space', value: s.name, okLabel: 'Save' });
+          if (!name) return;
+          await fetchJSON(`/api/spaces/${s.id}`, { method: 'PUT', body: { name } });
+          loadSpacesView();
+        } },
+        { label: 'Duplicate', onClick: async () => {
+          const full = await fetchJSON(`/api/spaces/${s.id}`);
+          const { id } = await fetchJSON('/api/spaces', { method: 'POST', body: { name: `${s.name} copy` } });
+          if (full.canvasState) await fetchJSON(`/api/spaces/${id}`, { method: 'PUT', body: { canvasState: full.canvasState } });
+          loadSpacesView();
+        } },
+        { label: 'Delete', danger: true, onClick: async () => {
+          if (!confirm(`Delete "${s.name}"? This can't be undone.`)) return;
+          await fetchJSON(`/api/spaces/${s.id}`, { method: 'DELETE' });
+          loadSpacesView();
+        } },
+      ]);
     });
     grid.appendChild(card);
   });
 }
 
+$('create-space-btn').addEventListener('click', async () => {
+  const name = await openNameModal({ title: 'Name this space', placeholder: 'e.g. Script 1', okLabel: 'Create' });
+  if (!name) return;
+  const { id } = await fetchJSON('/api/spaces', { method: 'POST', body: { name } });
+  location.href = `/v1?space=${id}`;
+});
+
 // --- canvas view -----------------------------------------------------------
 
-const state = { spaceId: null, editor: null, chatNodeId: null, sortMode: 'outlier', results: [] };
+const state = {
+  spaceId: null, editor: null, sortMode: 'outlier',
+  pool: new Map(),        // shortCode -> reel (with .handle attached) — everything ever pulled into the panel
+  selected: new Set(),    // shortCodes checked for multi-select group creation
+  currentHandle: null, currentLimit: 15,
+};
 
-function nodeIcon(name, size) { return icon(name, { size }); }
+function findNodesByClass(cls) {
+  const data = state.editor.drawflow.drawflow.Home.data;
+  return Object.keys(data).filter((id) => data[id].class === cls).map(Number);
+}
+
+function wireRemove(nodeId, el) {
+  const btn = el.querySelector('.node-remove');
+  if (!btn) return;
+  btn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    state.editor.removeNodeId(`node-${nodeId}`);
+  });
+}
+
+// --- node HTML builders ---------------------------------------------------
 
 function buildVideoNodeHtml(r) {
-  const thumb = proxied(r.thumbnail);
   return `
-    <div class="video-node">
-      <span class="score">${r.outlierScore != null ? r.outlierScore.toFixed(1) + '×' : '—'}</span>
-      <img class="thumb" src="${thumb}" onerror="imgFallback(this)" />
+    <div class="video-node node-card">
+      <button class="icon-btn tiny node-remove" title="Remove">${icon('close', { size: 11 })}</button>
+      <div class="thumb-wrap">
+        <span class="score">${r.outlierScore != null ? r.outlierScore.toFixed(1) + '×' : '—'}</span>
+        <img class="thumb" src="${proxied(r.thumbnail)}" onerror="imgFallback(this)" />
+        ${r.videoUrl ? `<button class="play-btn">${icon('play', { size: 16 })}</button>` : ''}
+      </div>
       <div class="body">
         <div class="handle">@${escapeHtml(r.handle || '')}</div>
         <div class="views">${fmtNum(r.views)} views</div>
+        <div class="node-actions">
+          <button class="secondary get-script-btn">Get Script</button>
+        </div>
       </div>
     </div>
   `;
 }
 
+function wireVideoNode(nodeId) {
+  const el = document.getElementById(`node-${nodeId}`);
+  if (!el || el.dataset.wired) return;
+  el.dataset.wired = '1';
+  wireRemove(nodeId, el);
+  const data = state.editor.drawflow.drawflow.Home.data[nodeId].data;
+  const playBtn = el.querySelector('.play-btn');
+  if (playBtn) playBtn.addEventListener('click', () => playInline(el.querySelector('.thumb-wrap'), data));
+  el.querySelector('.get-script-btn').addEventListener('click', async (e) => {
+    const btn = e.currentTarget;
+    btn.disabled = true;
+    btn.textContent = 'Fetching…';
+    try {
+      let transcript = data.transcript;
+      if (!transcript) {
+        const t = await fetchJSON(`/api/transcript?input=${encodeURIComponent(data.url)}`);
+        transcript = t.transcript;
+        state.editor.updateNodeDataFromId(nodeId, { ...data, transcript });
+      }
+      const pos = state.editor.drawflow.drawflow.Home.data[nodeId];
+      addScriptNode({ shortCode: data.shortCode, handle: data.handle, content: transcript }, pos.pos_x + 260, pos.pos_y);
+    } catch (err) {
+      alert(err.message);
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Get Script';
+    }
+  });
+}
+
+function buildGroupNodeHtml(g) {
+  const items = g.videos.map((v) => `
+    <div class="item">
+      <img src="${proxied(v.thumbnail)}" onerror="imgFallback(this)" />
+      <div><span class="item-handle">@${escapeHtml(v.handle || '')}</span> — ${fmtNum(v.views)} views</div>
+    </div>
+  `).join('');
+  return `
+    <div class="group-node node-card">
+      <button class="icon-btn tiny node-remove" title="Remove">${icon('close', { size: 11 })}</button>
+      <div class="head">
+        <span class="name">${escapeHtml(g.name)}</span>
+        <input class="rename-input" type="text" value="${escapeHtml(g.name)}" />
+        <button class="icon-btn tiny rename-btn" title="Rename">${icon('edit', { size: 11 })}</button>
+      </div>
+      <div class="items">${items}</div>
+      <div class="count">${g.videos.length} video${g.videos.length === 1 ? '' : 's'}</div>
+    </div>
+  `;
+}
+
+function wireGroupNode(nodeId) {
+  const el = document.getElementById(`node-${nodeId}`);
+  if (!el || el.dataset.wired) return;
+  el.dataset.wired = '1';
+  wireRemove(nodeId, el);
+  const nameEl = el.querySelector('.name');
+  const inputEl = el.querySelector('.rename-input');
+  el.querySelector('.rename-btn').addEventListener('click', (e) => {
+    e.stopPropagation();
+    nameEl.style.display = 'none';
+    inputEl.style.display = 'block';
+    inputEl.focus();
+    inputEl.select();
+  });
+  function commit() {
+    const val = inputEl.value.trim() || 'Group';
+    nameEl.textContent = val;
+    nameEl.style.display = '';
+    inputEl.style.display = 'none';
+    const data = state.editor.drawflow.drawflow.Home.data[nodeId].data;
+    state.editor.updateNodeDataFromId(nodeId, { ...data, name: val });
+    saveCanvasState();
+  }
+  inputEl.addEventListener('blur', commit);
+  inputEl.addEventListener('keydown', (e) => { if (e.key === 'Enter') inputEl.blur(); });
+}
+
+function buildScriptNodeHtml(s) {
+  return `
+    <div class="script-node node-card">
+      <button class="icon-btn tiny node-remove" title="Remove">${icon('close', { size: 11 })}</button>
+      <div class="head">${icon('sparkle', { size: 14 })} Script — @${escapeHtml(s.handle || '')}</div>
+      <div class="text">${escapeHtml(s.content)}</div>
+    </div>
+  `;
+}
+
+function addScriptNode(s, x, y) {
+  const id = state.editor.addNode('script', 0, 1, x, y, 'script-node', s, buildScriptNodeHtml(s));
+  wireScriptNode(id);
+  return id;
+}
+function wireScriptNode(nodeId) {
+  const el = document.getElementById(`node-${nodeId}`);
+  if (!el || el.dataset.wired) return;
+  el.dataset.wired = '1';
+  wireRemove(nodeId, el);
+}
+
 function buildChatNodeHtml() {
   return `
-    <div class="chat-node">
-      <div class="head">${nodeIcon('sparkle', 16)} AI Assistant</div>
+    <div class="chat-node node-card">
+      <div class="head">${icon('sparkle', { size: 16 })} AI Assistant</div>
       <div class="body">
         <textarea placeholder="What do you want it to write? (optional)" class="chat-prompt"></textarea>
         <div class="row"><button class="primary chat-generate">Generate Script</button></div>
@@ -338,12 +741,41 @@ function buildChatNodeHtml() {
   `;
 }
 
-function findChatNodeId() {
-  const data = state.editor.drawflow.drawflow.Home.data;
-  for (const id in data) {
-    if (data[id].class === 'chat-node') return Number(id);
+// Flattens whatever's connected into a chat node — video nodes, group nodes
+// (one entry per contained video), and script nodes (already has content) —
+// into a single list of {shortCode, handle, content}, fetching any missing
+// transcripts on demand and caching them back into the node's data.
+async function collectConnectedItems(chatNodeId, statusEl) {
+  const connections = state.editor.drawflow.drawflow.Home.data[chatNodeId].inputs.input_1?.connections || [];
+  const items = [];
+  for (const conn of connections) {
+    const node = state.editor.drawflow.drawflow.Home.data[conn.node];
+    if (!node) continue;
+    if (node.class === 'video-node') {
+      const v = node.data;
+      let transcript = v.transcript;
+      if (!transcript) {
+        statusEl.textContent = `Fetching transcript for @${v.handle}…`;
+        transcript = (await fetchJSON(`/api/transcript?input=${encodeURIComponent(v.url)}`)).transcript;
+        state.editor.updateNodeDataFromId(conn.node, { ...v, transcript });
+      }
+      if (transcript) items.push({ shortCode: v.shortCode, handle: v.handle, content: transcript });
+    } else if (node.class === 'group-node') {
+      for (const v of node.data.videos) {
+        let transcript = v.transcript;
+        if (!transcript) {
+          statusEl.textContent = `Fetching transcript for @${v.handle}…`;
+          transcript = (await fetchJSON(`/api/transcript?input=${encodeURIComponent(v.url)}`)).transcript;
+          v.transcript = transcript;
+        }
+        if (transcript) items.push({ shortCode: v.shortCode, handle: v.handle, content: transcript });
+      }
+      state.editor.updateNodeDataFromId(conn.node, node.data);
+    } else if (node.class === 'script-node') {
+      items.push({ shortCode: node.data.shortCode, handle: node.data.handle, content: node.data.content });
+    }
   }
-  return null;
+  return items;
 }
 
 function wireChatNode(nodeId) {
@@ -361,27 +793,15 @@ function wireChatNode(nodeId) {
     statusEl.classList.remove('error');
     const connections = state.editor.drawflow.drawflow.Home.data[nodeId].inputs.input_1?.connections || [];
     if (!connections.length) {
-      statusEl.textContent = 'Connect at least one video to this node first.';
+      statusEl.textContent = 'Connect at least one video or group to this node first.';
       statusEl.classList.add('error');
       return;
     }
     genBtn.disabled = true;
     genBtn.textContent = 'Generating…';
     try {
-      const items = [];
-      for (const conn of connections) {
-        const vData = state.editor.drawflow.drawflow.Home.data[conn.node]?.data;
-        if (!vData) continue;
-        let transcript = vData.transcript;
-        if (!transcript) {
-          statusEl.textContent = `Fetching transcript for @${vData.handle}…`;
-          const t = await fetchJSON(`/api/transcript?input=${encodeURIComponent(vData.url)}`);
-          transcript = t.transcript;
-          state.editor.updateNodeDataFromId(conn.node, { ...vData, transcript });
-        }
-        if (transcript) items.push({ shortCode: vData.shortCode, handle: vData.handle, content: transcript });
-      }
-      if (!items.length) throw new Error('Could not fetch a transcript for any connected video.');
+      const items = await collectConnectedItems(nodeId, statusEl);
+      if (!items.length) throw new Error('Could not fetch a transcript for anything connected.');
       statusEl.textContent = 'Generating script…';
       const { script } = await fetchJSON('/api/generate-script', { method: 'POST', body: { prompt: promptEl.value.trim(), items } });
       outputEl.textContent = script;
@@ -406,13 +826,40 @@ function wireChatNode(nodeId) {
 }
 
 function ensureChatNode() {
-  let id = findChatNodeId();
+  let id = findNodesByClass('chat-node')[0];
   if (id == null) {
-    id = state.editor.addNode('chat', 1, 0, 520, 140, 'chat-node', {}, buildChatNodeHtml());
+    id = state.editor.addNode('chat', 1, 0, 560, 160, 'chat-node', {}, buildChatNodeHtml());
   }
-  state.chatNodeId = id;
   wireChatNode(id);
 }
+
+// Drawflow persists each node's *rendered* HTML string at save time, not
+// just its data — so a space saved before a template/CSS change reopens
+// with stale markup that our current styles don't target. Rebuilding every
+// node's inner HTML from its stored data on load keeps old spaces looking
+// (and behaving) exactly like freshly-created nodes.
+function refreshAndWireAllNodes() {
+  const data = state.editor.drawflow.drawflow.Home.data;
+  Object.keys(data).forEach((id) => {
+    const cls = data[id].class;
+    const nid = Number(id);
+    const el = document.getElementById(`node-${nid}`);
+    if (!el) return;
+    const content = el.querySelector('.drawflow_content_node');
+    if (cls === 'chat-node') content.innerHTML = buildChatNodeHtml();
+    else if (cls === 'video-node') content.innerHTML = buildVideoNodeHtml(data[id].data);
+    else if (cls === 'group-node') content.innerHTML = buildGroupNodeHtml(data[id].data);
+    else if (cls === 'script-node') content.innerHTML = buildScriptNodeHtml(data[id].data);
+    else return;
+    delete el.dataset.wired;
+    if (cls === 'chat-node') wireChatNode(nid);
+    else if (cls === 'video-node') wireVideoNode(nid);
+    else if (cls === 'group-node') wireGroupNode(nid);
+    else if (cls === 'script-node') wireScriptNode(nid);
+  });
+}
+
+// --- persistence -----------------------------------------------------------
 
 let saveTimer = null;
 function saveCanvasState() {
@@ -429,6 +876,26 @@ function saveCanvasState() {
   }, 500);
 }
 
+// --- zoom / pan --------------------------------------------------------
+
+function applyTransform() {
+  const editor = state.editor;
+  editor.precanvas.style.transform = `translate(${editor.canvas_x}px, ${editor.canvas_y}px) scale(${editor.zoom})`;
+  $('zoom-pct').textContent = `${Math.round(editor.zoom * 100)}%`;
+}
+function setZoom(newZoom, pivotX, pivotY) {
+  const editor = state.editor;
+  newZoom = Math.max(editor.zoom_min, Math.min(editor.zoom_max, newZoom));
+  const rect = editor.container.getBoundingClientRect();
+  const px = pivotX != null ? pivotX - rect.left : rect.width / 2;
+  const py = pivotY != null ? pivotY - rect.top : rect.height / 2;
+  const ratio = newZoom / editor.zoom;
+  editor.canvas_x = px - (px - editor.canvas_x) * ratio;
+  editor.canvas_y = py - (py - editor.canvas_y) * ratio;
+  editor.zoom = newZoom;
+  applyTransform();
+}
+
 function initEditor() {
   const container = $('drawflow');
   const editor = new Drawflow(container);
@@ -442,17 +909,58 @@ function initEditor() {
   editor.on('connectionCreated', () => saveCanvasState());
   editor.on('connectionRemoved', () => saveCanvasState());
 
+  // Smooth zoom (ctrl/cmd + wheel, or trackpad pinch which reports as a
+  // ctrl-wheel event) with fine-grained steps around the cursor, plus plain
+  // two-finger trackpad scroll to pan in any direction — Drawflow's default
+  // only supports a coarse, fixed-step ctrl+wheel zoom and no wheel panning.
+  container.addEventListener('wheel', (e) => {
+    e.preventDefault();
+    if (e.ctrlKey || e.metaKey) {
+      const factor = Math.exp(-e.deltaY * 0.0035);
+      setZoom(editor.zoom * factor, e.clientX, e.clientY);
+    } else {
+      editor.canvas_x -= e.deltaX;
+      editor.canvas_y -= e.deltaY;
+      applyTransform();
+    }
+  }, { passive: false });
+
+  document.addEventListener('keydown', (e) => {
+    if (!(e.ctrlKey || e.metaKey)) return;
+    if (e.key === '+' || e.key === '=') { e.preventDefault(); setZoom(editor.zoom * 1.15); }
+    else if (e.key === '-') { e.preventDefault(); setZoom(editor.zoom * 0.87); }
+  });
+  $('zoom-in-btn').addEventListener('click', () => setZoom(editor.zoom * 1.15));
+  $('zoom-out-btn').addEventListener('click', () => setZoom(editor.zoom * 0.87));
+  $('zoom-fit-btn').addEventListener('click', () => {
+    editor.zoom = 1; editor.canvas_x = 0; editor.canvas_y = 0;
+    applyTransform();
+  });
+
+  function clientToCanvas(clientX, clientY) {
+    const rect = container.getBoundingClientRect();
+    return {
+      x: (clientX - rect.left) / editor.zoom - editor.canvas_x / editor.zoom,
+      y: (clientY - rect.top) / editor.zoom - editor.canvas_y / editor.zoom,
+    };
+  }
+
   container.addEventListener('dragover', (e) => e.preventDefault());
   container.addEventListener('drop', (e) => {
     e.preventDefault();
     const raw = e.dataTransfer.getData('application/json');
     if (!raw) return;
-    const r = JSON.parse(raw);
-    const rect = container.getBoundingClientRect();
-    const zoom = editor.zoom;
-    const posX = (e.clientX - rect.left) / zoom - editor.canvas_x / zoom;
-    const posY = (e.clientY - rect.top) / zoom - editor.canvas_y / zoom;
-    editor.addNode(r.shortCode, 0, 1, posX, posY, 'video-node', r, buildVideoNodeHtml(r));
+    const payload = JSON.parse(raw);
+    const pos = clientToCanvas(e.clientX, e.clientY);
+    if (payload.type === 'group') {
+      const id = editor.addNode('group', 0, 1, pos.x, pos.y, 'group-node', { name: 'Group 1', videos: payload.videos }, buildGroupNodeHtml({ name: 'Group 1', videos: payload.videos }));
+      wireGroupNode(id);
+      state.selected.clear();
+      renderResults();
+    } else {
+      const id = editor.addNode(payload.shortCode, 0, 1, pos.x, pos.y, 'video-node', payload, buildVideoNodeHtml(payload));
+      wireVideoNode(id);
+    }
   });
 
   return editor;
@@ -470,47 +978,90 @@ async function openSpace(id) {
   initEditor();
   if (space.canvasState) {
     state.editor.import(space.canvasState);
-    // Re-wire any chat node(s) restored from the saved state.
-    Object.keys(state.editor.drawflow.drawflow.Home.data).forEach((id) => {
-      if (state.editor.drawflow.drawflow.Home.data[id].class === 'chat-node') wireChatNode(Number(id));
-    });
+    refreshAndWireAllNodes();
   }
   ensureChatNode();
+  applyTransform();
+  loadTrackedCategories();
 }
 
 $('back-btn').addEventListener('click', () => { location.href = '/v1'; });
+$('rename-space-btn').addEventListener('click', async () => {
+  const name = await openNameModal({ title: 'Rename space', value: $('space-name').textContent, okLabel: 'Save' });
+  if (!name) return;
+  $('space-name').textContent = name;
+  document.title = `${name} — Instagram Outlier v1`;
+  await fetchJSON(`/api/spaces/${state.spaceId}`, { method: 'PUT', body: { name } });
+});
+$('panel-toggle-btn').addEventListener('click', () => {
+  $('search-panel').classList.toggle('collapsed');
+});
 
-// --- creator search panel -------------------------------------------------
+// --- creator search + track ------------------------------------------------
 
 function renderResults() {
-  const list = (state.sortMode === 'outlier'
-    ? [...state.results].sort((a, b) => (b.outlierScore ?? -1) - (a.outlierScore ?? -1))
-    : [...state.results].sort((a, b) => new Date(b.timestamp || 0) - new Date(a.timestamp || 0))
-  ).slice(0, 15); // v1 only ever shows the top 15, however many came back from cache
+  const list = [...state.pool.values()];
+  const sorted = state.sortMode === 'outlier'
+    ? list.sort((a, b) => (b.outlierScore ?? -1) - (a.outlierScore ?? -1))
+    : list.sort((a, b) => new Date(b.timestamp || 0) - new Date(a.timestamp || 0));
 
   const container = $('search-results');
   container.innerHTML = '';
-  list.forEach((r) => {
+  sorted.forEach((r) => {
     const card = document.createElement('div');
-    card.className = 'search-card';
+    card.className = 'video-card';
     card.draggable = true;
+    const checked = state.selected.has(r.shortCode);
     card.innerHTML = `
-      <img src="${proxied(r.thumbnail)}" onerror="imgFallback(this)" />
+      <input type="checkbox" class="check" ${checked ? 'checked' : ''} />
+      <div class="thumb-wrap">
+        <span class="score-badge">${r.outlierScore != null ? r.outlierScore.toFixed(1) + '×' : '—'}</span>
+        <img src="${proxied(r.thumbnail)}" onerror="imgFallback(this)" />
+        ${r.videoUrl ? `<button class="play-btn">${icon('play', { size: 14 })}</button>` : ''}
+        <button class="add-btn" title="Add to canvas">${icon('plus', { size: 14 })}</button>
+      </div>
       <div class="info">
-        <div class="cap">${escapeHtml(r.caption || '(no caption)')}</div>
-        <div class="meta"><span class="score">${r.outlierScore != null ? r.outlierScore.toFixed(1) + '×' : '—'}</span><span>${fmtNum(r.views)} views</span></div>
+        <div>@${escapeHtml(r.handle || '')}</div>
+        <div class="views">${fmtNum(r.views)} views</div>
       </div>
     `;
+    const playBtn = card.querySelector('.play-btn');
+    if (playBtn) playBtn.addEventListener('click', (e) => { e.stopPropagation(); playInline(card.querySelector('.thumb-wrap'), r); });
+
+    card.querySelector('.check').addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (e.target.checked) state.selected.add(r.shortCode);
+      else state.selected.delete(r.shortCode);
+    });
+    card.querySelector('.add-btn').addEventListener('click', (e) => {
+      e.stopPropagation();
+      const editor = state.editor;
+      const centerX = (editor.container.clientWidth / 2) / editor.zoom - editor.canvas_x / editor.zoom;
+      const centerY = (editor.container.clientHeight / 2) / editor.zoom - editor.canvas_y / editor.zoom;
+      const id = editor.addNode(r.shortCode, 0, 1, centerX, centerY, 'video-node', r, buildVideoNodeHtml(r));
+      wireVideoNode(id);
+    });
     card.addEventListener('dragstart', (e) => {
-      e.dataTransfer.setData('application/json', JSON.stringify({
-        shortCode: r.shortCode, handle: r.handle, url: r.url, thumbnail: r.thumbnail,
-        views: r.views, outlierScore: r.outlierScore, caption: r.caption, transcript: null,
-      }));
+      const selectedList = [...state.selected].map((code) => state.pool.get(code)).filter(Boolean);
+      if (selectedList.length > 1 && state.selected.has(r.shortCode)) {
+        e.dataTransfer.setData('application/json', JSON.stringify({ type: 'group', videos: selectedList }));
+      } else {
+        e.dataTransfer.setData('application/json', JSON.stringify(r));
+      }
       card.classList.add('dragging');
     });
     card.addEventListener('dragend', () => card.classList.remove('dragging'));
     container.appendChild(card);
   });
+}
+
+function addToPool(reels, handle) {
+  reels.slice(0, 15).forEach((r) => state.pool.set(r.shortCode, { ...r, handle }));
+  renderResults();
+}
+function removeFromPoolByHandle(handle) {
+  for (const [code, r] of state.pool) if (r.handle === handle) state.pool.delete(code);
+  renderResults();
 }
 
 async function searchCreator() {
@@ -519,12 +1070,15 @@ async function searchCreator() {
   if (!input) { statusEl.textContent = 'Enter a username.'; return; }
   statusEl.textContent = 'Loading…';
   statusEl.classList.remove('error');
-  $('search-results').innerHTML = '';
+  state.currentLimit = 15;
   try {
-    const data = await fetchJSON(`/api/creator?input=${encodeURIComponent(input)}&limit=15`);
-    state.results = data.reels.map((r) => ({ ...r, handle: data.profile.handle }));
-    statusEl.textContent = `${state.results.length} videos`;
-    renderResults();
+    const data = await fetchJSON(`/api/creator?input=${encodeURIComponent(input)}&limit=${state.currentLimit}`);
+    state.currentHandle = data.profile.handle;
+    addToPool(data.reels, data.profile.handle);
+    statusEl.textContent = `${data.reels.length} videos from @${data.profile.handle}`;
+    $('track-row').style.display = 'flex';
+    $('track-btn').textContent = data.bookmarked ? `✓ Tracking @${data.profile.handle}` : `+ Track @${data.profile.handle}`;
+    $('load-more-btn').style.display = data.hasMore ? 'block' : 'none';
   } catch (err) {
     statusEl.textContent = err.message;
     statusEl.classList.add('error');
@@ -544,6 +1098,93 @@ $('sort-latest').addEventListener('click', () => {
   $('sort-outlier').classList.remove('active');
   renderResults();
 });
+$('load-more-btn').addEventListener('click', async () => {
+  state.currentLimit += 15;
+  const data = await fetchJSON(`/api/creator?input=${encodeURIComponent(state.currentHandle)}&limit=${state.currentLimit}`);
+  addToPool(data.reels, data.profile.handle);
+  $('load-more-btn').style.display = data.hasMore ? 'block' : 'none';
+});
+
+// --- track modal -------------------------------------------------------
+
+async function openTrackModal(handle) {
+  $('track-modal-handle').textContent = `@${handle}`;
+  const { categories } = await fetchJSON('/api/creator-categories');
+  let selectedCatId = null;
+  const list = $('track-cat-list');
+  function renderCats() {
+    list.innerHTML = '';
+    categories.forEach((c) => {
+      const row = document.createElement('div');
+      row.className = 'category-pick' + (selectedCatId === c.id ? ' selected' : '');
+      row.textContent = c.name;
+      row.addEventListener('click', () => { selectedCatId = c.id; renderCats(); });
+      list.appendChild(row);
+    });
+  }
+  renderCats();
+  $('track-modal').classList.add('open');
+
+  $('track-new-cat-btn').onclick = async () => {
+    const name = $('track-new-cat-input').value.trim();
+    if (!name) return;
+    const data = await fetchJSON('/api/creator-categories', { method: 'POST', body: { name } });
+    categories.length = 0;
+    categories.push(...data.categories);
+    $('track-new-cat-input').value = '';
+    selectedCatId = categories[categories.length - 1]?.id ?? null;
+    renderCats();
+  };
+  $('track-modal-cancel').onclick = () => $('track-modal').classList.remove('open');
+  $('track-modal-ok').onclick = async () => {
+    await fetchJSON('/api/bookmarks', { method: 'POST', body: { handle, action: 'add' } });
+    if (selectedCatId != null) await fetchJSON('/api/bookmarks/category', { method: 'POST', body: { handle, categoryId: selectedCatId } });
+    $('track-modal').classList.remove('open');
+    $('track-btn').textContent = `✓ Tracking @${handle}`;
+    loadTrackedCategories();
+  };
+}
+$('track-btn').addEventListener('click', () => { if (state.currentHandle) openTrackModal(state.currentHandle); });
+
+// --- tracked categories panel ------------------------------------------
+
+async function loadTrackedCategories() {
+  const [{ categories }, { bookmarks }] = await Promise.all([
+    fetchJSON('/api/creator-categories'),
+    fetchJSON('/api/bookmarks'),
+  ]);
+  const container = $('tracked-cats');
+  container.innerHTML = '';
+  const sections = [...categories, { id: null, name: 'Uncategorized' }];
+  sections.forEach((cat) => {
+    const creators = bookmarks.filter((b) => (b.categoryId ?? null) === cat.id);
+    if (!creators.length) return;
+    const box = document.createElement('div');
+    box.className = 'tracked-cat';
+    box.innerHTML = `
+      <div class="tracked-cat-head">${icon('chev', { size: 13 })}<span>${escapeHtml(cat.name)}</span></div>
+      <div class="tracked-cat-body"></div>
+    `;
+    box.querySelector('.tracked-cat-head').addEventListener('click', () => box.classList.toggle('open'));
+    const body = box.querySelector('.tracked-cat-body');
+    creators.forEach((c) => {
+      const row = document.createElement('label');
+      row.className = 'tracked-creator-row';
+      const picUrl = proxied(c.profile && c.profile.profilePicUrl);
+      row.innerHTML = `<input type="checkbox" data-handle="${c.handle}" /><img src="${picUrl}" onerror="imgFallback(this)" />@${escapeHtml(c.handle)}`;
+      row.querySelector('input').addEventListener('change', async (e) => {
+        if (e.target.checked) {
+          const data = await fetchJSON(`/api/creator?input=${encodeURIComponent(c.handle)}&limit=15`);
+          addToPool(data.reels, data.profile.handle);
+        } else {
+          removeFromPoolByHandle(c.handle);
+        }
+      });
+      body.appendChild(row);
+    });
+    container.appendChild(box);
+  });
+}
 
 // --- boot -------------------------------------------------------------
 
