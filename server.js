@@ -352,6 +352,17 @@ function median(nums) {
   return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
 }
 
+// Instagram (via the scraper) reports two different metrics: videoViewCount
+// ("views") and videoPlayCount ("plays", counts every replay/autoplay loop
+// and is typically much larger). Mixing them — using whichever happened to
+// be present per reel — made the outlier calculation compare apples to
+// oranges across a creator's reels, and inflated numbers well past what's
+// shown on Instagram. Views is the closer, more conservative match to what
+// the app labels "views" everywhere, so use it exclusively; a reel with no
+// view count is left out of the outlier math entirely rather than silently
+// substituted with plays.
+const OUTLIER_SCORE_CAP = 100;
+
 function normalizeReelItem(it) {
   const shortCode = it.shortCode || it.shortcode || '';
   return {
@@ -360,7 +371,7 @@ function normalizeReelItem(it) {
     caption: it.caption || '',
     thumbnail: it.displayUrl || it.thumbnailUrl || '',
     videoUrl: it.videoUrl || null,
-    views: numOrNull(it.videoViewCount ?? it.videoPlayCount),
+    views: numOrNull(it.videoViewCount),
     likes: numOrNull(it.likesCount),
     duration: numOrNull(it.videoDuration),
     timestamp: it.timestamp || null,
@@ -373,7 +384,7 @@ function computeOutlierScores(normalized) {
   const med = median(views);
   return normalized.map((r) => ({
     ...r,
-    outlierScore: med > 0 && r.views != null ? r.views / med : null,
+    outlierScore: med > 0 && r.views != null ? Math.min(r.views / med, OUTLIER_SCORE_CAP) : null,
   }));
 }
 

@@ -656,10 +656,10 @@
           <div class="dual-slider">
             <div class="dual-slider-track"></div>
             <div class="dual-slider-range" id="add-range-fill"></div>
-            <input type="range" id="add-score-min" min="0" max="500" step="1" />
-            <input type="range" id="add-score-max" min="0" max="500" step="1" />
+            <input type="range" id="add-score-min" min="0" max="100" step="1" />
+            <input type="range" id="add-score-max" min="0" max="100" step="1" />
             <div class="slider-pill" id="add-score-min-pill">0&times;</div>
-            <div class="slider-pill" id="add-score-max-pill">500&times;</div>
+            <div class="slider-pill" id="add-score-max-pill">100&times;</div>
           </div>
         </div>
         <div class="field">
@@ -714,10 +714,10 @@
         <div class="dual-slider">
           <div class="dual-slider-track"></div>
           <div class="dual-slider-range" id="videos-range-fill"></div>
-          <input type="range" id="videos-score-min" min="0" max="500" step="1" />
-          <input type="range" id="videos-score-max" min="0" max="500" step="1" />
+          <input type="range" id="videos-score-min" min="0" max="100" step="1" />
+          <input type="range" id="videos-score-max" min="0" max="100" step="1" />
           <div class="slider-pill" id="videos-score-min-pill">0&times;</div>
-          <div class="slider-pill" id="videos-score-max-pill">500&times;</div>
+          <div class="slider-pill" id="videos-score-max-pill">100&times;</div>
         </div>
       </div>
       <div class="field">
@@ -950,7 +950,7 @@ function escapeHtml(str) {
   return div.innerHTML;
 }
 
-const SCORE_SLIDER_MAX = 500;
+const SCORE_SLIDER_MAX = 100;
 
 function filterAndSort(reels, { sortBy, lengthFilter, dateFilter, scoreMin, scoreMax }) {
   let items = [...reels];
