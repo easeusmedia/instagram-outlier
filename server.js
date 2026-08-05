@@ -820,11 +820,19 @@ app.get('/api/spaces/:id', async (req, res) => {
 });
 
 app.put('/api/spaces/:id', async (req, res) => {
-  const canvasState = (req.body && req.body.canvasState) || null;
-  await run('UPDATE spaces SET canvas_state = ? WHERE id = ?', [
-    canvasState ? JSON.stringify(canvasState) : null,
-    Number(req.params.id),
-  ]);
+  const id = Number(req.params.id);
+  const body = req.body || {};
+  if (body.name != null) {
+    const name = body.name.trim();
+    if (!name) return res.status(400).json({ error: 'Name is required.' });
+    await run('UPDATE spaces SET name = ? WHERE id = ?', [name, id]);
+  }
+  if ('canvasState' in body) {
+    await run('UPDATE spaces SET canvas_state = ? WHERE id = ?', [
+      body.canvasState ? JSON.stringify(body.canvasState) : null,
+      id,
+    ]);
+  }
   res.json({ ok: true });
 });
 
