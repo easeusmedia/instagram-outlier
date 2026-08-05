@@ -353,14 +353,13 @@ function median(nums) {
 }
 
 // Instagram (via the scraper) reports two different metrics: videoViewCount
-// ("views") and videoPlayCount ("plays", counts every replay/autoplay loop
-// and is typically much larger). Mixing them — using whichever happened to
-// be present per reel — made the outlier calculation compare apples to
-// oranges across a creator's reels, and inflated numbers well past what's
-// shown on Instagram. Views is the closer, more conservative match to what
-// the app labels "views" everywhere, so use it exclusively; a reel with no
-// view count is left out of the outlier math entirely rather than silently
-// substituted with plays.
+// and videoPlayCount ("plays", counts every replay/autoplay loop). Verified
+// directly against Instagram's own grid (the small eye-icon count) for a
+// real reel: it matched videoPlayCount, while videoViewCount read roughly
+// half that — so videoPlayCount is the one that belongs in the "views"
+// column. videoViewCount is kept only as a fallback for the rare case
+// videoPlayCount is missing, so a reel isn't dropped from the outlier math
+// entirely over one absent field.
 const OUTLIER_SCORE_CAP = 100;
 
 function normalizeReelItem(it) {
@@ -371,7 +370,7 @@ function normalizeReelItem(it) {
     caption: it.caption || '',
     thumbnail: it.displayUrl || it.thumbnailUrl || '',
     videoUrl: it.videoUrl || null,
-    views: numOrNull(it.videoViewCount),
+    views: numOrNull(it.videoPlayCount ?? it.videoViewCount),
     likes: numOrNull(it.likesCount),
     duration: numOrNull(it.videoDuration),
     timestamp: it.timestamp || null,
