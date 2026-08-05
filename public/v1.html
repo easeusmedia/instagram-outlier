@@ -128,6 +128,13 @@
   .new-cat-row { display: flex; gap: 8px; }
   .new-cat-row input { flex: 1; }
   .empty-cat-note { font-size: 12px; color: var(--text-faint); padding: 4px 2px 10px; }
+  .transcript-modal-body {
+    max-height: 50vh; overflow-y: auto; font-size: 12.5px; line-height: 1.6; color: var(--text-dim);
+    white-space: pre-wrap; background: rgba(255,255,255,0.035); border: 1px solid var(--border);
+    border-radius: var(--radius-sm); padding: 12px; margin-bottom: 4px;
+  }
+  .manage-cat-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 10px; border: 1px solid var(--border); border-radius: var(--radius-sm); margin-bottom: 6px; font-size: 12.5px; color: var(--text-dim); }
+  .manage-cat-row .remove-creator-btn { width: 24px; height: 24px; flex-shrink: 0; }
 
   /* --- dropdown menu ----------------------------------------------- */
   .dropdown-menu {
@@ -267,13 +274,20 @@
   .reel-frame .score.score-hot { color: #4CFF9E; text-shadow: 0 0 10px rgba(76,255,158,0.45); }
   .reel-frame .score.score-mid { color: #F3FF4C; text-shadow: 0 0 10px rgba(243,255,76,0.4); }
   .reel-frame .score.score-low { color: #FF4C6A; text-shadow: 0 0 10px rgba(255,76,106,0.4); }
+  .reel-frame .menu-btn {
+    position: absolute; top: 7px; right: 7px; z-index: 2; width: 22px; height: 22px; border-radius: 7px;
+    background: rgba(8,9,11,0.62); border: 1px solid rgba(255,255,255,0.08); backdrop-filter: blur(8px);
+    color: var(--text-dim);
+  }
+  .reel-frame .menu-btn:hover { color: var(--text); border-color: var(--border-hover); }
+
+  /* Every reel card — standalone video-node or a mini inside a group —
+     shares this same body markup so they're pixel-identical everywhere. */
+  .reel-meta { padding: 10px 12px 12px; }
+  .reel-meta .handle { font-size: 11.5px; font-weight: 500; color: var(--text-dim); }
+  .reel-meta .views { font-size: 11px; color: var(--text-faint); margin-top: 2px; }
 
   .video-node { width: var(--reel-w); }
-  .video-node .body { padding: 10px 12px 12px; }
-  .video-node .handle { font-size: 11.5px; font-weight: 500; color: var(--text-dim); }
-  .video-node .views { font-size: 11px; color: var(--text-faint); margin-top: 2px; }
-  .video-node .node-actions { margin-top: 8px; }
-  .video-node .node-actions button { width: 100%; font-size: 11px; padding: 6px 8px; }
 
   .group-node { width: auto; max-width: 740px; }
   .group-node .head { display: flex; align-items: center; gap: 6px; padding: 11px 14px; border-bottom: 1px solid var(--border); }
@@ -284,7 +298,7 @@
   .group-node .filmstrip::-webkit-scrollbar-thumb { background: var(--border-hover); border-radius: 4px; }
   .group-node .filmstrip .mini { width: var(--reel-w); flex-shrink: 0; }
   .group-node .filmstrip .mini .reel-frame { border-radius: var(--radius-sm); }
-  .group-node .filmstrip .mini .handle { font-size: 11.5px; font-weight: 500; color: var(--text-dim); margin-top: 6px; text-align: center; }
+  .group-node .filmstrip .mini .reel-meta { padding: 8px 2px 0; }
   .group-node .footer { padding: 0 14px 14px; }
   .group-node .footer button { width: 100%; font-size: 11px; padding: 6px 8px; }
   .group-node .count { font-size: 11px; color: var(--text-faint); padding: 0 14px 12px; }
@@ -302,11 +316,18 @@
   .chat-node .attached { flex-wrap: wrap; gap: 6px; }
   .chat-node .attached .chip {
     display: inline-flex; align-items: center; gap: 5px; font-size: 10.5px; color: var(--text-faint);
-    background: var(--surface); border: 1px solid var(--border); border-radius: 20px; padding: 3px 9px 3px 7px;
+    background: var(--surface); border: 1px solid var(--border); border-radius: 20px; padding: 3px 6px 3px 7px;
+    cursor: default; transition: border-color .15s;
   }
   .chat-node .attached .chip .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--text-faint); flex-shrink: 0; }
-  .chat-node .attached .chip.ready { color: var(--text-dim); }
+  .chat-node .attached .chip.ready { color: var(--text-dim); cursor: pointer; }
+  .chat-node .attached .chip.ready:hover { border-color: var(--border-hover); }
   .chat-node .attached .chip.ready .dot { background: #4CFF9E; }
+  .chat-node .attached .chip .chip-x {
+    width: 15px; height: 15px; border-radius: 50%; border: none; background: transparent; color: var(--text-faint);
+    display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+  }
+  .chat-node .attached .chip .chip-x:hover { background: rgba(255,107,107,0.18); color: var(--danger); }
   .chat-node textarea { min-height: 60px; resize: vertical; }
   .chat-node .output-box { min-height: 100px; max-height: 260px; overflow-y: auto; background: rgba(255,255,255,0.035); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 11px; font-size: 12px; line-height: 1.6; color: var(--text-dim); white-space: pre-wrap; }
   .chat-node .row { display: flex; gap: 8px; }
@@ -315,8 +336,10 @@
   .chat-node .status.error { color: var(--danger); }
 
   /* --- bottom toolbar ----------------------------------------------- */
+  /* Fixed to the viewport (not #drawflow) so toggling the right panel —
+     which resizes #drawflow via flex — never shifts this left/right. */
   .bottom-toolbar {
-    position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%);
+    position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
     display: flex; align-items: center; gap: 4px; background: rgba(12,14,17,0.85);
     border: 1px solid var(--border-hover); border-radius: 16px; padding: 6px;
     box-shadow: 0 14px 34px rgba(0,0,0,0.5); backdrop-filter: var(--glass-blur); z-index: 20;
@@ -326,7 +349,9 @@
 
   /* --- search panel ------------------------------------------------- */
   .search-panel {
-    width: 420px; flex-shrink: 0; background: rgba(10,11,13,0.55); border-left: 1px solid var(--border);
+    width: 420px; flex-shrink: 0; border-left: 1px solid var(--border);
+    background: linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.02) 40%, rgba(9,10,12,0.62));
+    box-shadow: inset 1px 0 0 rgba(255,255,255,0.04), -24px 0 60px rgba(0,0,0,0.35);
     display: flex; flex-direction: column; overflow: hidden; transition: margin-right .25s ease;
     backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur);
   }
@@ -340,11 +365,21 @@
   .tracked-cat { border: 1px solid var(--border); border-radius: var(--radius-sm); margin-bottom: 8px; overflow: hidden; }
   .tracked-cat-head { display: flex; align-items: center; gap: 8px; padding: 10px 12px; cursor: pointer; font-size: 12.5px; font-weight: 500; color: var(--text-dim); }
   .tracked-cat-head .chev { transition: transform .15s; color: var(--text-faint); }
+  .tracked-cat-head span { flex: 1; }
+  .tracked-cat-head .cat-manage-btn { width: 22px; height: 22px; flex-shrink: 0; }
   .tracked-cat.open .chev { transform: rotate(90deg); }
   .tracked-cat-body { display: none; padding: 2px 12px 10px; }
   .tracked-cat.open .tracked-cat-body { display: block; }
   .tracked-creator-row { display: flex; align-items: center; gap: 8px; padding: 6px 0; font-size: 12.5px; color: var(--text-dim); }
   .tracked-creator-row img { width: 20px; height: 20px; border-radius: 50%; object-fit: cover; background: rgba(255,255,255,0.06); }
+  .tracked-creator-row input:disabled { opacity: 0.55; cursor: default; }
+
+  .creator-result-header {
+    display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 12px;
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sm);
+  }
+  .creator-result-header .info { font-size: 12.5px; color: var(--text-dim); }
+  .creator-result-header .info b { color: var(--text); font-weight: 500; }
 
   .search-row { display: flex; gap: 8px; }
   .sort-row { display: flex; gap: 8px; margin-top: 10px; }
@@ -359,7 +394,7 @@
   }
   .video-card:hover { border-color: var(--border-hover); box-shadow: 0 0 0 1px var(--accent-soft); }
   .video-card.dragging { opacity: 0.4; }
-  .video-card .check { position: absolute; top: 7px; left: 7px; z-index: 3; }
+  .video-card .check { position: absolute; top: 7px; right: 7px; z-index: 3; }
   .video-card .add-btn {
     position: absolute; bottom: 7px; right: 7px; width: 24px; height: 24px; border-radius: 50%;
     background: rgba(10,11,13,0.75); color: var(--text); border: 1px solid var(--border-hover); display: flex; align-items: center; justify-content: center;
@@ -428,6 +463,7 @@
           </div>
         </div>
         <div class="status" id="search-status"></div>
+        <div class="creator-result-header" id="creator-result-header" style="display:none"></div>
         <div class="results-grid" id="search-results"></div>
         <button class="ghost" id="load-more-btn" style="display:none">Load 15 more</button>
       </div>
@@ -469,6 +505,30 @@
   <button id="space-menu-rename">Rename</button>
   <button id="space-menu-duplicate">Duplicate</button>
   <button class="danger" id="space-menu-delete">Delete</button>
+</div>
+
+<div class="modal-overlay" id="transcript-modal">
+  <div class="modal" style="width:460px">
+    <h3 id="transcript-modal-title">Transcript</h3>
+    <div class="transcript-modal-body" id="transcript-modal-body"></div>
+    <div class="modal-actions">
+      <button class="secondary" id="transcript-modal-copy">Copy</button>
+      <button class="primary" id="transcript-modal-close">Close</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="manage-cat-modal">
+  <div class="modal" style="width:420px">
+    <h3>Manage category</h3>
+    <div class="field"><input type="text" id="manage-cat-name-input" placeholder="Category name" /></div>
+    <div class="category-pick-list" id="manage-cat-creators" style="max-height:240px"></div>
+    <div class="modal-actions">
+      <button class="secondary" id="manage-cat-cancel">Cancel</button>
+      <button class="secondary" id="manage-cat-delete" style="color:var(--danger)">Delete category</button>
+      <button class="primary" id="manage-cat-save">Save name</button>
+    </div>
+  </div>
 </div>
 
 <script src="https://cdn.jsdelivr.net/gh/jerosoler/Drawflow/dist/drawflow.min.js"></script>
@@ -591,6 +651,26 @@ function openNameModal({ title, desc = '', placeholder = '', value = '', okLabel
   });
 }
 
+// Shows a video/script/AI-output's text content read-only — backs the
+// per-card "Get Transcript" kebab item and the clickable attachment chips
+// on a chat node. `getContent` may be a plain string or a function
+// returning one (sync or async), so the same call site works whether the
+// content is already cached or still needs fetching.
+async function openTranscriptModal(title, getContent) {
+  $('transcript-modal-title').textContent = title;
+  const body = $('transcript-modal-body');
+  body.textContent = 'Loading…';
+  $('transcript-modal').classList.add('open');
+  try {
+    const content = typeof getContent === 'function' ? await getContent() : getContent;
+    body.textContent = content || 'No transcript available.';
+  } catch (err) {
+    body.textContent = err.message;
+  }
+}
+$('transcript-modal-close').addEventListener('click', () => $('transcript-modal').classList.remove('open'));
+$('transcript-modal-copy').addEventListener('click', () => navigator.clipboard.writeText($('transcript-modal-body').textContent));
+
 let openDropdownCloser = null;
 function openDropdown(anchorEl, items) {
   if (openDropdownCloser) openDropdownCloser();
@@ -681,11 +761,25 @@ const state = {
   pool: new Map(),        // shortCode -> reel (with .handle attached) — everything ever pulled into the panel
   selected: new Set(),    // shortCodes checked for multi-select group creation
   currentHandle: null, currentLimit: 15,
-  showAllTracked: true, allTracked: [], // [{handle, profile}]
+  showAllTracked: true, allTracked: [], categories: [], // [{handle, profile}] / [{id, name}]
+  checkedHandles: new Set(), // which tracked creators contribute to the pool when "show all" is off
+  poolLoadToken: 0, // bumped to invalidate an in-flight loadDefaultPool() when a search takes over
   pendingConnection: null,
 };
 
-const PAN_LIMIT = 2600; // keeps the "infinite" canvas from feeling infinite
+// Fixed WORLD-SPACE half-extent the camera can roam — expressed in local
+// (unscaled) canvas units, not screen pixels, so the pannable area is a
+// genuinely finite rectangle no matter how far you're zoomed in or out.
+// (A screen-pixel limit would let you see further and further into the
+// canvas the more you zoom out, which is what made it feel "infinite".)
+const WORLD_HALF = 3000;
+function panBounds(zoom, rect) {
+  const rangeX = WORLD_HALF * zoom, rangeY = WORLD_HALF * zoom;
+  return {
+    minX: rect.width / 2 - rangeX, maxX: rect.width / 2 + rangeX,
+    minY: rect.height / 2 - rangeY, maxY: rect.height / 2 + rangeY,
+  };
+}
 
 function findNodesByClass(cls) {
   const data = state.editor.drawflow.drawflow.Home.data;
@@ -714,22 +808,51 @@ function wireRemove(nodeId, el) {
 
 // --- node HTML builders ---------------------------------------------------
 
+// Shared by every reel-shaped card — standalone video-node or a mini inside
+// a group — so they render pixel-identical everywhere: same frame, same
+// score badge, same play button, same kebab menu, same handle/views body.
+function buildReelFrame(v) {
+  return `
+    <div class="reel-frame">
+      ${scoreBadge(v.outlierScore)}
+      <img class="thumb" src="${proxied(v.thumbnail)}" onerror="imgFallback(this)" draggable="false" />
+      <button class="play-btn">${icon('play', { size: 15 })}</button>
+      <button class="icon-btn tiny menu-btn" title="More">${icon('more', { size: 12 })}</button>
+    </div>
+    <div class="reel-meta">
+      <div class="handle">@${escapeHtml(v.handle || '')}</div>
+      <div class="views">${fmtNum(v.views)} views</div>
+    </div>
+  `;
+}
+
+// Wires the play button and the kebab "Get Transcript" menu shared by a
+// reel-frame. `getData`/`setTranscript` let the same wiring serve both a
+// standalone video-node (data lives on the node) and a mini inside a group
+// (data lives at `node.data.videos[idx]`).
+function wireReelFrame(el, { getData, ensureTranscript }) {
+  const playBtn = el.querySelector('.play-btn');
+  preventNodeDrag(playBtn);
+  playBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    playInline(el.querySelector('.reel-frame'), getData());
+  });
+  const menuBtn = el.querySelector('.menu-btn');
+  preventNodeDrag(menuBtn);
+  menuBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const data = getData();
+    openDropdown(menuBtn, [
+      { label: 'Get Transcript', onClick: () => openTranscriptModal(`@${data.handle}`, ensureTranscript) },
+    ]);
+  });
+}
+
 function buildVideoNodeHtml(r) {
   return `
     <div class="video-node node-card">
       <button class="icon-btn tiny node-remove" title="Remove">${icon('close', { size: 11 })}</button>
-      <div class="reel-frame">
-        ${scoreBadge(r.outlierScore)}
-        <img class="thumb" src="${proxied(r.thumbnail)}" onerror="imgFallback(this)" draggable="false" />
-        <button class="play-btn">${icon('play', { size: 15 })}</button>
-      </div>
-      <div class="body">
-        <div class="handle">@${escapeHtml(r.handle || '')}</div>
-        <div class="views">${fmtNum(r.views)} views</div>
-        <div class="node-actions">
-          <button class="secondary get-script-btn">Get Script</button>
-        </div>
-      </div>
+      ${buildReelFrame(r)}
     </div>
   `;
 }
@@ -739,48 +862,14 @@ function wireVideoNode(nodeId) {
   if (!el || el.dataset.wired) return;
   el.dataset.wired = '1';
   wireRemove(nodeId, el);
-  const data = state.editor.drawflow.drawflow.Home.data[nodeId].data;
-  const playBtn = el.querySelector('.play-btn');
-  preventNodeDrag(playBtn);
-  playBtn.addEventListener('click', (e) => {
-    e.stopPropagation();
-    playInline(el.querySelector('.reel-frame'), data);
-  });
-  const scriptBtn = el.querySelector('.get-script-btn');
-  preventNodeDrag(scriptBtn);
-  scriptBtn.addEventListener('click', async (e) => {
-    const btn = e.currentTarget;
-    btn.disabled = true;
-    btn.textContent = 'Fetching…';
-    try {
-      let transcript = data.transcript;
-      if (!transcript) {
-        const t = await fetchJSON(`/api/transcript?input=${encodeURIComponent(data.url)}`);
-        transcript = t.transcript;
-        state.editor.updateNodeDataFromId(nodeId, { ...data, transcript });
-      }
-      const pos = state.editor.drawflow.drawflow.Home.data[nodeId];
-      addScriptNode({ shortCode: data.shortCode, handle: data.handle, url: data.url, content: transcript }, pos.pos_x + 200, pos.pos_y);
-    } catch (err) {
-      alert(err.message);
-    } finally {
-      btn.disabled = false;
-      btn.textContent = 'Get Script';
-    }
+  wireReelFrame(el, {
+    getData: () => state.editor.drawflow.drawflow.Home.data[nodeId].data,
+    ensureTranscript: () => ensureVideoTranscript(nodeId),
   });
 }
 
 function buildMiniReelHtml(v, idx) {
-  return `
-    <div class="mini" data-idx="${idx}">
-      <div class="reel-frame">
-        ${scoreBadge(v.outlierScore)}
-        <img src="${proxied(v.thumbnail)}" onerror="imgFallback(this)" draggable="false" />
-        <button class="play-btn">${icon('play', { size: 15 })}</button>
-      </div>
-      <div class="handle">@${escapeHtml(v.handle || '')}</div>
-    </div>
-  `;
+  return `<div class="mini" data-idx="${idx}">${buildReelFrame(v)}</div>`;
 }
 
 function buildGroupNodeHtml(g) {
@@ -805,14 +894,11 @@ function wireGroupNode(nodeId) {
   if (!el || el.dataset.wired) return;
   el.dataset.wired = '1';
   wireRemove(nodeId, el);
-  const data = state.editor.drawflow.drawflow.Home.data[nodeId].data;
   el.querySelectorAll('.mini').forEach((mini) => {
     const idx = Number(mini.dataset.idx);
-    const miniPlayBtn = mini.querySelector('.play-btn');
-    preventNodeDrag(miniPlayBtn);
-    miniPlayBtn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      playInline(mini.querySelector('.reel-frame'), data.videos[idx]);
+    wireReelFrame(mini, {
+      getData: () => state.editor.drawflow.drawflow.Home.data[nodeId].data.videos[idx],
+      ensureTranscript: () => ensureGroupVideoTranscript(nodeId, idx),
     });
   });
   const groupScriptBtn = el.querySelector('.get-script-btn');
@@ -891,17 +977,21 @@ function wireScriptNode(nodeId) {
   wireRemove(nodeId, el);
 }
 
-function buildChatNodeHtml() {
+// data.prompt/data.output persist across reloads AND make this node's own
+// generated script available as an input to a *downstream* chat node —
+// that's what lets one AI Assistant chain into another.
+function buildChatNodeHtml(data = {}) {
+  const hasOutput = !!data.output;
   return `
     <div class="chat-node node-card">
       <div class="head">${icon('sparkle', { size: 15 })} AI Assistant</div>
       <div class="body">
         <div class="attached" style="display:none"></div>
-        <textarea placeholder="What do you want it to write? (optional)" class="chat-prompt"></textarea>
+        <textarea placeholder="What do you want it to write? (optional)" class="chat-prompt">${escapeHtml(data.prompt || '')}</textarea>
         <div class="row"><button class="primary chat-generate">Generate Script</button></div>
         <div class="status chat-status"></div>
-        <div class="output-box chat-output" style="display:none"></div>
-        <div class="row chat-output-actions" style="display:none"><button class="secondary chat-copy">Copy</button></div>
+        <div class="output-box chat-output" style="${hasOutput ? '' : 'display:none'}">${escapeHtml(data.output || '')}</div>
+        <div class="row chat-output-actions" style="${hasOutput ? 'display:flex' : 'display:none'}"><button class="secondary chat-copy">Copy</button></div>
       </div>
     </div>
   `;
@@ -946,36 +1036,73 @@ async function collectConnectedItems(chatNodeId, statusEl) {
       }
     } else if (node.class === 'script-node') {
       items.push({ shortCode: node.data.shortCode, handle: node.data.handle, content: node.data.content });
+    } else if (node.class === 'chat-node') {
+      if (node.data.output) items.push({ shortCode: null, handle: 'previous-ai-output', content: node.data.output });
     }
   }
   return items;
 }
 
+// Builds the list of { label, ready, fetch?, content, disconnect } entries
+// currently feeding a chat node — one row per underlying video (a group
+// connection expands to one row per video it contains), plus a row for a
+// connected script-node or an upstream chat-node's own output. Shared by
+// refreshChatAttachments (renders it) and nothing else, kept separate so
+// the "what's connected" logic isn't tangled up with DOM building.
+function describeChatInputs(chatNodeId) {
+  const editor = state.editor;
+  const node = editor.drawflow.drawflow.Home.data[chatNodeId];
+  const connections = node?.inputs.input_1?.connections || [];
+  const entries = [];
+  connections.forEach((conn) => {
+    const src = editor.drawflow.drawflow.Home.data[conn.node];
+    if (!src) return;
+    const disconnect = () => editor.removeSingleConnection(conn.node, chatNodeId, 'output_1', 'input_1');
+    if (src.class === 'video-node') {
+      entries.push({
+        label: `@${src.data.handle}`, ready: !!src.data.transcript,
+        fetch: () => ensureVideoTranscript(conn.node),
+        content: () => editor.drawflow.drawflow.Home.data[conn.node].data.transcript,
+        disconnect,
+      });
+    } else if (src.class === 'group-node') {
+      src.data.videos.forEach((v, i) => entries.push({
+        label: `@${v.handle}`, ready: !!v.transcript,
+        fetch: () => ensureGroupVideoTranscript(conn.node, i),
+        content: () => editor.drawflow.drawflow.Home.data[conn.node].data.videos[i].transcript,
+        disconnect,
+      }));
+    } else if (src.class === 'script-node') {
+      entries.push({ label: `@${src.data.handle}`, ready: true, content: () => src.data.content, disconnect });
+    } else if (src.class === 'chat-node') {
+      entries.push({ label: 'Prior AI output', ready: !!src.data.output, content: () => src.data.output, disconnect });
+    }
+  });
+  return entries;
+}
+
 // Shows what's plugged into a chat node as soon as it's connected — a chip
-// per underlying video, greying in once its transcript has actually been
-// fetched — and kicks off those fetches right away instead of waiting for
-// Generate Script to discover it needs them.
+// per underlying video (or upstream script/AI output), greying in once its
+// content has actually been fetched/generated — and kicks off those
+// fetches right away instead of waiting for Generate Script to discover it
+// needs them. Each chip is clickable (opens the full text) and carries a
+// × to disconnect just that source.
 async function refreshChatAttachments(chatNodeId) {
   const el = document.getElementById(`node-${chatNodeId}`);
   if (!el) return;
   const box = el.querySelector('.attached');
-  const node = state.editor.drawflow.drawflow.Home.data[chatNodeId];
-  const connections = node?.inputs.input_1?.connections || [];
-  const entries = [];
-  connections.forEach((conn) => {
-    const src = state.editor.drawflow.drawflow.Home.data[conn.node];
-    if (!src) return;
-    if (src.class === 'video-node') {
-      entries.push({ handle: src.data.handle, ready: !!src.data.transcript, fetch: () => ensureVideoTranscript(conn.node) });
-    } else if (src.class === 'group-node') {
-      src.data.videos.forEach((v, i) => entries.push({ handle: v.handle, ready: !!v.transcript, fetch: () => ensureGroupVideoTranscript(conn.node, i) }));
-    } else if (src.class === 'script-node') {
-      entries.push({ handle: src.data.handle, ready: true });
-    }
-  });
+  const entries = describeChatInputs(chatNodeId);
   if (!entries.length) { box.style.display = 'none'; box.innerHTML = ''; return; }
   box.style.display = 'flex';
-  box.innerHTML = entries.map((e) => `<span class="chip${e.ready ? ' ready' : ''}"><span class="dot"></span>@${escapeHtml(e.handle || '')}</span>`).join('');
+  box.innerHTML = '';
+  entries.forEach((e) => {
+    const chip = document.createElement('span');
+    chip.className = 'chip' + (e.ready ? ' ready' : '');
+    chip.innerHTML = `<span class="dot"></span>${escapeHtml(e.label)}<button class="chip-x" title="Disconnect">${icon('close', { size: 9 })}</button>`;
+    chip.addEventListener('click', () => { if (e.ready) openTranscriptModal(e.label, e.content); });
+    chip.querySelector('.chip-x').addEventListener('click', (ev) => { ev.stopPropagation(); e.disconnect(); });
+    box.appendChild(chip);
+  });
   const pending = entries.filter((e) => !e.ready && e.fetch);
   if (pending.length) await Promise.all(pending.map((e) => e.fetch().catch(() => {})));
   if (pending.length) refreshChatAttachments(chatNodeId); // repaint once the fetches land
@@ -993,6 +1120,7 @@ function wireChatNode(nodeId) {
   preventNodeDrag(promptEl);
   preventNodeDrag(genBtn);
   preventNodeDrag(copyBtn);
+  preventNodeDrag(el.querySelector('.attached'));
 
   genBtn.addEventListener('click', async () => {
     statusEl.textContent = '';
@@ -1014,7 +1142,12 @@ function wireChatNode(nodeId) {
       outputEl.style.display = 'block';
       copyBtn.parentElement.style.display = 'flex';
       statusEl.textContent = '';
+      // Persist into node data (survives reload) and as the content a
+      // downstream chat-node can chain off of.
+      const curData = state.editor.drawflow.drawflow.Home.data[nodeId].data;
+      state.editor.updateNodeDataFromId(nodeId, { ...curData, prompt: promptEl.value.trim(), output: script });
       saveCanvasState();
+      refreshAllChatAttachments();
     } catch (err) {
       statusEl.textContent = err.message;
       statusEl.classList.add('error');
@@ -1036,9 +1169,17 @@ function wireChatNode(nodeId) {
 function ensureChatNode() {
   let id = findNodesByClass('chat-node')[0];
   if (id == null) {
-    id = state.editor.addNode('chat', 1, 0, 560, 160, 'chat-node', {}, buildChatNodeHtml());
+    id = state.editor.addNode('chat', 1, 1, 560, 160, 'chat-node', {}, buildChatNodeHtml());
   }
   wireChatNode(id);
+}
+
+// Any chat-node's chip strip can flip ready/not-ready when a connection is
+// made/broken elsewhere or another chat-node finishes generating — shared
+// so every call site (connect/disconnect, generate success, node rebuild)
+// can refresh every chat node's chips in one place.
+function refreshAllChatAttachments() {
+  findNodesByClass('chat-node').forEach((id) => refreshChatAttachments(id));
 }
 
 // Drawflow persists each node's *rendered* HTML string at save time, not
@@ -1048,13 +1189,22 @@ function ensureChatNode() {
 // (and behaving) exactly like freshly-created nodes.
 function refreshAndWireAllNodes() {
   const data = state.editor.drawflow.drawflow.Home.data;
-  Object.keys(data).forEach((id) => {
+  // One bad node's rebuild throwing shouldn't take every other node down
+  // with it (Array#forEach doesn't catch), so each node is rebuilt inside
+  // its own try/catch.
+  Object.keys(data).forEach((id) => { try {
     const cls = data[id].class;
     const nid = Number(id);
     const el = document.getElementById(`node-${nid}`);
     if (!el) return;
     const content = el.querySelector('.drawflow_content_node');
-    if (cls === 'chat-node') content.innerHTML = buildChatNodeHtml();
+    if (cls === 'chat-node') {
+      content.innerHTML = buildChatNodeHtml(data[id].data);
+      // Chat nodes saved before chat-to-chat chaining was added have no
+      // output port — retrofit one so old spaces gain the ability too.
+      // (addNodeOutput takes the bare node id, not the "node-<id>" DOM id.)
+      if (!data[id].outputs?.output_1) state.editor.addNodeOutput(id);
+    }
     else if (cls === 'video-node') content.innerHTML = buildVideoNodeHtml(data[id].data);
     else if (cls === 'group-node') content.innerHTML = buildGroupNodeHtml(data[id].data);
     else if (cls === 'script-node') content.innerHTML = buildScriptNodeHtml(data[id].data);
@@ -1064,7 +1214,7 @@ function refreshAndWireAllNodes() {
     else if (cls === 'video-node') wireVideoNode(nid);
     else if (cls === 'group-node') wireGroupNode(nid);
     else if (cls === 'script-node') wireScriptNode(nid);
-  });
+  } catch (err) { console.error(`Failed to rebuild node ${id}:`, err); } });
   // Rebuilding a node's content can change its rendered size (an old
   // save's markup vs. today's template), which leaves connection paths
   // drawn for the old geometry — still present, just no longer lined up
@@ -1098,8 +1248,10 @@ function saveCanvasState() {
 
 function clampPan() {
   const editor = state.editor;
-  editor.canvas_x = Math.max(-PAN_LIMIT, Math.min(PAN_LIMIT, editor.canvas_x));
-  editor.canvas_y = Math.max(-PAN_LIMIT, Math.min(PAN_LIMIT, editor.canvas_y));
+  const rect = editor.container.getBoundingClientRect();
+  const b = panBounds(editor.zoom, rect);
+  editor.canvas_x = Math.max(b.minX, Math.min(b.maxX, editor.canvas_x));
+  editor.canvas_y = Math.max(b.minY, Math.min(b.maxY, editor.canvas_y));
 }
 function applyTransform() {
   const editor = state.editor;
@@ -1207,21 +1359,48 @@ function recenterOnContent() {
 
 function initEditor() {
   const container = $('drawflow');
-  const editor = new Drawflow(container);
+  let editor; // assigned below; the wheel handler closes over it
+
+  // Drawflow's own constructor (via .start(), called next) attaches its own
+  // ctrl+wheel zoom_enter listener directly on this same container — a
+  // *fixed-step* zoom around no particular pivot. Registering ours here,
+  // first, matters: for listeners on the exact event target, the browser
+  // always runs them in registration order regardless of capture, so going
+  // first lets us stopImmediatePropagation and fully replace Drawflow's
+  // built-in zoom instead of letting both independently rewrite
+  // zoom/canvas_x/canvas_y on every tick — that double-processing was the
+  // actual cause of the choppy, drifting zoom (and, by extension, the
+  // connections looking "distorted" as canvas_x/y fell out of sync).
+  container.addEventListener('wheel', (e) => {
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    if (e.ctrlKey || e.metaKey) {
+      const factor = Math.exp(-e.deltaY * 0.0035);
+      setZoom(editor.zoom * factor, e.clientX, e.clientY);
+    } else {
+      editor.canvas_x -= e.deltaX;
+      editor.canvas_y -= e.deltaY;
+      applyTransform();
+    }
+  }, { passive: false });
+
+  editor = new Drawflow(container);
   editor.reroute = true;
   editor.start();
   state.editor = editor;
 
-  // Drawflow lets you pan by dragging empty canvas directly, which writes
-  // to precanvas.style.transform itself — completely bypassing our
+  // Drawflow also lets you pan by dragging empty canvas directly, which
+  // writes to precanvas.style.transform itself — bypassing our
   // applyTransform()/setZoom() wrappers below. Watching the style attribute
   // catches every path (ours and Drawflow's own) in one place: it clamps
-  // the pan back inside PAN_LIMIT, keeps the zoom-% readout current, and
-  // slides the dot grid's background-position to match so it visibly pans
-  // with the content instead of the two drifting apart.
+  // the pan back inside the finite world bound, keeps the zoom-% readout
+  // current, and slides the dot grid's background-position to match so it
+  // visibly pans with the content instead of the two drifting apart.
   new MutationObserver(() => {
-    const cx = Math.max(-PAN_LIMIT, Math.min(PAN_LIMIT, editor.canvas_x));
-    const cy = Math.max(-PAN_LIMIT, Math.min(PAN_LIMIT, editor.canvas_y));
+    const rect = editor.container.getBoundingClientRect();
+    const b = panBounds(editor.zoom, rect);
+    const cx = Math.max(b.minX, Math.min(b.maxX, editor.canvas_x));
+    const cy = Math.max(b.minY, Math.min(b.maxY, editor.canvas_y));
     if (cx !== editor.canvas_x || cy !== editor.canvas_y) {
       editor.canvas_x = cx; editor.canvas_y = cy;
       editor.precanvas.style.transform = `translate(${cx}px, ${cy}px) scale(${editor.zoom})`;
@@ -1230,10 +1409,6 @@ function initEditor() {
     $('zoom-pct').textContent = `${Math.round(editor.zoom * 100)}%`;
     container.style.backgroundPosition = `${editor.canvas_x}px ${editor.canvas_y}px, 0 0, 0 0`;
   }).observe(editor.precanvas, { attributes: true, attributeFilter: ['style'] });
-
-  function refreshAllChatAttachments() {
-    findNodesByClass('chat-node').forEach((id) => refreshChatAttachments(id));
-  }
 
   editor.on('nodeCreated', () => saveCanvasState());
   editor.on('nodeRemoved', () => saveCanvasState());
@@ -1269,22 +1444,6 @@ function initEditor() {
     hideConnectionDelete();
   });
 
-  // Smooth zoom (ctrl/cmd + wheel, or trackpad pinch which reports as a
-  // ctrl-wheel event) with fine-grained steps around the cursor, plus plain
-  // two-finger trackpad scroll to pan in any direction — Drawflow's default
-  // only supports a coarse, fixed-step ctrl+wheel zoom and no wheel panning.
-  container.addEventListener('wheel', (e) => {
-    e.preventDefault();
-    if (e.ctrlKey || e.metaKey) {
-      const factor = Math.exp(-e.deltaY * 0.0035);
-      setZoom(editor.zoom * factor, e.clientX, e.clientY);
-    } else {
-      editor.canvas_x -= e.deltaX;
-      editor.canvas_y -= e.deltaY;
-      applyTransform();
-    }
-  }, { passive: false });
-
   document.addEventListener('keydown', (e) => {
     if (!(e.ctrlKey || e.metaKey)) return;
     if (e.key === '+' || e.key === '=') { e.preventDefault(); setZoom(editor.zoom * 1.15); }
@@ -1297,7 +1456,7 @@ function initEditor() {
   $('add-chat-btn').addEventListener('click', () => {
     const centerX = (editor.container.clientWidth / 2) / editor.zoom - editor.canvas_x / editor.zoom;
     const centerY = (editor.container.clientHeight / 2) / editor.zoom - editor.canvas_y / editor.zoom;
-    const id = editor.addNode('chat', 1, 0, centerX, centerY, 'chat-node', {}, buildChatNodeHtml());
+    const id = editor.addNode('chat', 1, 1, centerX, centerY, 'chat-node', {}, buildChatNodeHtml());
     wireChatNode(id);
   });
 
@@ -1426,26 +1585,50 @@ function removeFromPoolByHandle(handle) {
   renderResults();
 }
 
+// Renders the "N videos from @handle" + Track button as its own header
+// row (separate from the plain status line) so the Track button is never
+// easy to miss the way it was buried inline in a small status div.
+function renderCreatorHeader(data) {
+  const box = $('creator-result-header');
+  box.style.display = 'flex';
+  box.innerHTML = `<span class="info">${data.reels.length} videos from <b>@${escapeHtml(data.profile.handle)}</b></span>`;
+  const trackBtn = document.createElement('button');
+  trackBtn.className = 'secondary' + (data.bookmarked ? ' active' : '');
+  trackBtn.textContent = data.bookmarked ? '✓ Tracking' : '+ Track';
+  trackBtn.addEventListener('click', () => openTrackModal(data.profile.handle, trackBtn));
+  box.appendChild(trackBtn);
+}
+function hideCreatorHeader() { $('creator-result-header').style.display = 'none'; }
+
+// Leaving search mode is a single, explicit reset — search results and the
+// tracked-creator pool are never shown mixed together, so anything that
+// switches context back to "tracked" (checking a tracked creator, clearing
+// the search box) goes through here first.
+function exitSearchIfActive() {
+  if (!state.currentHandle) return;
+  state.currentHandle = null;
+  $('search-input').value = '';
+  $('search-status').textContent = '';
+  $('load-more-btn').style.display = 'none';
+  hideCreatorHeader();
+}
+
 async function searchCreator() {
   const input = $('search-input').value.trim();
   const statusEl = $('search-status');
   if (!input) { statusEl.textContent = 'Enter a username.'; return; }
   statusEl.textContent = 'Loading…';
   statusEl.classList.remove('error');
+  hideCreatorHeader();
   state.currentLimit = 15;
+  state.poolLoadToken++; // invalidate any in-flight loadDefaultPool so it can't clobber this search
   try {
     const data = await fetchJSON(`/api/creator?input=${encodeURIComponent(input)}&limit=${state.currentLimit}`);
     state.currentHandle = data.profile.handle;
     state.pool.clear();
     addToPool(data.reels, data.profile.handle);
-    statusEl.innerHTML = `${data.reels.length} videos from @${data.profile.handle}`;
-    statusEl.appendChild(document.createElement('br'));
-    const trackBtn = document.createElement('button');
-    trackBtn.className = 'secondary';
-    trackBtn.style.marginTop = '8px';
-    trackBtn.textContent = data.bookmarked ? `✓ Tracking @${data.profile.handle}` : `+ Track @${data.profile.handle}`;
-    trackBtn.addEventListener('click', () => openTrackModal(data.profile.handle, trackBtn));
-    statusEl.appendChild(trackBtn);
+    statusEl.textContent = '';
+    renderCreatorHeader(data);
     $('load-more-btn').style.display = data.hasMore ? 'block' : 'none';
   } catch (err) {
     statusEl.textContent = err.message;
@@ -1455,7 +1638,7 @@ async function searchCreator() {
 $('search-btn').addEventListener('click', searchCreator);
 $('search-input').addEventListener('keydown', (e) => { if (e.key === 'Enter') searchCreator(); });
 $('search-input').addEventListener('input', (e) => {
-  if (!e.target.value.trim()) { state.currentHandle = null; loadDefaultPool(); }
+  if (!e.target.value.trim()) { state.currentHandle = null; hideCreatorHeader(); loadDefaultPool(); }
 });
 $('sort-outlier').addEventListener('click', () => {
   state.sortMode = 'outlier';
@@ -1527,6 +1710,7 @@ async function loadTrackedCategories() {
     fetchJSON('/api/bookmarks'),
   ]);
   state.allTracked = bookmarks;
+  state.categories = categories;
   const container = $('tracked-cats');
   container.innerHTML = '';
   categories.forEach((cat) => {
@@ -1535,21 +1719,29 @@ async function loadTrackedCategories() {
     const box = document.createElement('div');
     box.className = 'tracked-cat';
     box.innerHTML = `
-      <div class="tracked-cat-head">${icon('chev', { size: 13 })}<span>${escapeHtml(cat.name)}</span></div>
+      <div class="tracked-cat-head">${icon('chev', { size: 13 })}<span>${escapeHtml(cat.name)}</span><button class="icon-btn tiny cat-manage-btn" title="Manage category">${icon('more', { size: 12 })}</button></div>
       <div class="tracked-cat-body"></div>
     `;
     box.querySelector('.tracked-cat-head').addEventListener('click', () => box.classList.toggle('open'));
+    box.querySelector('.cat-manage-btn').addEventListener('click', (e) => {
+      e.stopPropagation();
+      openManageCategoryModal(cat);
+    });
     const body = box.querySelector('.tracked-cat-body');
     creators.forEach((c) => {
       const row = document.createElement('label');
       row.className = 'tracked-creator-row';
       const picUrl = proxied(c.profile && c.profile.profilePicUrl);
-      row.innerHTML = `<input type="checkbox" class="checkbox" data-handle="${c.handle}" /><img src="${picUrl}" onerror="imgFallback(this)" />@${escapeHtml(c.handle)}`;
+      const checked = state.showAllTracked || state.checkedHandles.has(c.handle);
+      row.innerHTML = `<input type="checkbox" class="checkbox" ${checked ? 'checked' : ''} ${state.showAllTracked ? 'disabled' : ''} /><img src="${picUrl}" onerror="imgFallback(this)" />@${escapeHtml(c.handle)}`;
       row.querySelector('input').addEventListener('change', async (e) => {
+        exitSearchIfActive();
         if (e.target.checked) {
+          state.checkedHandles.add(c.handle);
           const data = await fetchJSON(`/api/creator?input=${encodeURIComponent(c.handle)}&limit=15`);
           addToPool(data.reels, data.profile.handle);
         } else {
+          state.checkedHandles.delete(c.handle);
           removeFromPoolByHandle(c.handle);
         }
       });
@@ -1557,15 +1749,30 @@ async function loadTrackedCategories() {
     });
     container.appendChild(box);
   });
-  if (state.showAllTracked && !state.currentHandle) loadDefaultPool();
+  if (!state.currentHandle) loadDefaultPool();
 }
 
 async function loadDefaultPool() {
-  if (!state.showAllTracked) { state.pool.clear(); renderResults(); return; }
+  const token = ++state.poolLoadToken; // superseded by a later search or another loadDefaultPool call
+  if (!state.showAllTracked) {
+    state.pool.clear();
+    for (const h of state.checkedHandles) {
+      if (state.poolLoadToken !== token) return;
+      try {
+        const data = await fetchJSON(`/api/creator?input=${encodeURIComponent(h)}&limit=15`);
+        if (state.poolLoadToken !== token) return;
+        addToPool(data.reels, data.profile.handle);
+      } catch { /* skip creators that fail to load */ }
+    }
+    return;
+  }
+  state.checkedHandles = new Set(state.allTracked.map((b) => b.handle));
   state.pool.clear();
   for (const b of state.allTracked) {
+    if (state.poolLoadToken !== token) return;
     try {
       const data = await fetchJSON(`/api/creator?input=${encodeURIComponent(b.handle)}&limit=15`);
+      if (state.poolLoadToken !== token) return;
       addToPool(data.reels, data.profile.handle);
     } catch { /* skip creators that fail to load */ }
   }
@@ -1573,8 +1780,51 @@ async function loadDefaultPool() {
 
 $('show-all-toggle').addEventListener('change', (e) => {
   state.showAllTracked = e.target.checked;
-  if (!state.currentHandle) loadDefaultPool();
+  exitSearchIfActive();
+  loadTrackedCategories();
 });
+
+// --- manage category modal (rename / delete / untrack a creator) --------
+
+async function openManageCategoryModal(cat) {
+  $('manage-cat-name-input').value = cat.name;
+  const listEl = $('manage-cat-creators');
+  function render() {
+    const creators = state.allTracked.filter((b) => b.categoryId === cat.id);
+    listEl.innerHTML = creators.length ? '' : '<div class="empty-cat-note">No creators in this category.</div>';
+    creators.forEach((c) => {
+      const row = document.createElement('div');
+      row.className = 'manage-cat-row';
+      row.innerHTML = `<span>@${escapeHtml(c.handle)}</span><button class="icon-btn tiny remove-creator-btn" title="Stop tracking">${icon('close', { size: 11 })}</button>`;
+      row.querySelector('.remove-creator-btn').addEventListener('click', async () => {
+        if (!confirm(`Stop tracking @${c.handle}?`)) return;
+        await fetchJSON('/api/bookmarks', { method: 'POST', body: { handle: c.handle, action: 'remove' } });
+        state.checkedHandles.delete(c.handle);
+        removeFromPoolByHandle(c.handle);
+        await loadTrackedCategories();
+        render();
+      });
+      listEl.appendChild(row);
+    });
+  }
+  render();
+  $('manage-cat-modal').classList.add('open');
+
+  $('manage-cat-cancel').onclick = () => $('manage-cat-modal').classList.remove('open');
+  $('manage-cat-save').onclick = async () => {
+    const name = $('manage-cat-name-input').value.trim();
+    if (!name || name === cat.name) { $('manage-cat-modal').classList.remove('open'); return; }
+    await fetchJSON(`/api/creator-categories/${cat.id}`, { method: 'PATCH', body: { name } });
+    $('manage-cat-modal').classList.remove('open');
+    loadTrackedCategories();
+  };
+  $('manage-cat-delete').onclick = async () => {
+    if (!confirm(`Delete category "${cat.name}"? Its creators stay tracked but become uncategorized.`)) return;
+    await fetchJSON(`/api/creator-categories/${cat.id}`, { method: 'DELETE' });
+    $('manage-cat-modal').classList.remove('open');
+    loadTrackedCategories();
+  };
+}
 
 // --- boot -------------------------------------------------------------
 
