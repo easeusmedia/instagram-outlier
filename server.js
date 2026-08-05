@@ -109,6 +109,9 @@ await run(`CREATE TABLE IF NOT EXISTS video_tags (shortcode TEXT PRIMARY KEY, ca
 await run(`CREATE TABLE IF NOT EXISTS saved_videos (shortcode TEXT PRIMARY KEY, saved_at TEXT)`);
 await run(`CREATE TABLE IF NOT EXISTS scripts (id INTEGER PRIMARY KEY AUTOINCREMENT, shortcode TEXT, handle TEXT, content TEXT, created_at TEXT)`);
 await run(`CREATE TABLE IF NOT EXISTS creator_checks (handle TEXT PRIMARY KEY, checked_at TEXT)`);
+// v1 canvas: a "space" is one named Drawflow board. canvas_state is
+// whatever editor.export() produced last, saved back verbatim.
+await run(`CREATE TABLE IF NOT EXISTS spaces (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, canvas_state JSON, created_at TEXT)`);
 
 // Script Generator's LLM call is a plain OpenAI-compatible chat completion,
 // so any provider with that API shape works by just changing base URL/model.
@@ -533,6 +536,12 @@ if (AUTH_ENABLED) {
 
 app.use(express.static(path.join(__dirname, 'public')));
 
+// v1: the new node-canvas UI, served as its own page so the base app at "/"
+// is untouched. Same backend, same database, different frontend.
+app.get('/v1', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'v1.html'));
+});
+
 app.get('/api/creator', async (req, res) => {
   try {
     const parsed = parseInput(req.query.input);
@@ -784,6 +793,46 @@ app.delete('/api/scripts/:id', async (req, res) => {
   res.json({ scripts: await listScripts() });
 });
 
+// --- v1 canvas: spaces ---------------------------------------------------
+
+app.get('/api/spaces', async (req, res) => {
+  const rows = await queryAll('SELECT id, name, created_at FROM spaces ORDER BY id DESC');
+  res.json({ spaces: rows });
+});
+
+app.post('/api/spaces', async (req, res) => {
+  const name = ((req.body && req.body.name) || '').trim();
+  if (!name) return res.status(400).json({ error: 'Name is required.' });
+  const result = await run('INSERT INTO spaces (name, canvas_state, created_at) VALUES (?, ?, ?)', [
+    name,
+    null,
+    new Date().toISOString(),
+  ]);
+  res.json({ id: Number(result.lastInsertRowid) });
+});
+
+app.get('/api/spaces/:id', async (req, res) => {
+  const row = await queryOne('SELECT id, name, canvas_state, created_at FROM spaces WHERE id = ?', [
+    Number(req.params.id),
+  ]);
+  if (!row) return res.status(404).json({ error: 'Space not found.' });
+  res.json({ id: row.id, name: row.name, createdAt: row.created_at, canvasState: row.canvas_state ? JSON.parse(row.canvas_state) : null });
+});
+
+app.put('/api/spaces/:id', async (req, res) => {
+  const canvasState = (req.body && req.body.canvasState) || null;
+  await run('UPDATE spaces SET canvas_state = ? WHERE id = ?', [
+    canvasState ? JSON.stringify(canvasState) : null,
+    Number(req.params.id),
+  ]);
+  res.json({ ok: true });
+});
+
+app.delete('/api/spaces/:id', async (req, res) => {
+  await run('DELETE FROM spaces WHERE id = ?', [Number(req.params.id)]);
+  res.json({ ok: true });
+});
+
 app.get('/api/settings/llm', async (req, res) => {
   const s = await getLlmSettings();
   res.json({ baseUrl: s.baseUrl, model: s.model, hasKey: !!s.apiKey });
@@ -819,33 +868,43 @@ app.delete('/api/settings/llm', async (req, res) => {
   res.json({ baseUrl: s.baseUrl, model: s.model, hasKey: !!s.apiKey });
 });
 
-app.post('/api/generate-script', async (req, res) => {
+// Shared by the global Script Genie (v0, pulls from the scripts table) and
+// the v1 canvas (generates from whatever's connected to a chat node) — same
+// LLM call, different source for which transcripts go in.
+async function callLlmForScript(items, prompt) {
   const settings = await getLlmSettings();
-  if (!settings.apiKey) return res.status(400).json({ error: 'Add an LLM API key in Settings first.' });
-  const scripts = await listScripts();
-  if (!scripts.length) return res.status(400).json({ error: 'Drag at least one script in first.' });
-  const prompt = (req.body && req.body.prompt) || '';
-  const scriptsBlock = scripts.map((s, i) => `--- Script ${i + 1} (@${s.handle || 'unknown'}) ---\n${s.content}`).join('\n\n');
+  if (!settings.apiKey) throw new Error('Add an LLM API key in Settings first.');
+  if (!items.length) throw new Error('Nothing to generate from yet.');
+  const scriptsBlock = items
+    .map((s, i) => `--- Script ${i + 1} (@${s.handle || 'unknown'}) ---\n${s.content}`)
+    .join('\n\n');
   const userContent = prompt ? `${scriptsBlock}\n\n--- Instructions ---\n${prompt}` : scriptsBlock;
+  const resp = await fetch(`${settings.baseUrl.replace(/\/$/, '')}/chat/completions`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${settings.apiKey}` },
+    body: JSON.stringify({
+      model: settings.model,
+      messages: [
+        { role: 'system', content: SCRIPT_SYSTEM_PROMPT },
+        { role: 'user', content: userContent },
+      ],
+    }),
+  });
+  const data = await resp.json();
+  if (!resp.ok) throw new Error(data?.error?.message || `LLM request failed (${resp.status})`);
+  const text = data?.choices?.[0]?.message?.content;
+  if (!text) throw new Error('LLM returned no content.');
+  return text;
+}
+
+app.post('/api/generate-script', async (req, res) => {
+  const prompt = (req.body && req.body.prompt) || '';
+  const items = req.body && Array.isArray(req.body.items) ? req.body.items : await listScripts();
   try {
-    const resp = await fetch(`${settings.baseUrl.replace(/\/$/, '')}/chat/completions`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${settings.apiKey}` },
-      body: JSON.stringify({
-        model: settings.model,
-        messages: [
-          { role: 'system', content: SCRIPT_SYSTEM_PROMPT },
-          { role: 'user', content: userContent },
-        ],
-      }),
-    });
-    const data = await resp.json();
-    if (!resp.ok) throw new Error(data?.error?.message || `LLM request failed (${resp.status})`);
-    const text = data?.choices?.[0]?.message?.content;
-    if (!text) throw new Error('LLM returned no content.');
-    res.json({ script: text });
+    const script = await callLlmForScript(items, prompt);
+    res.json({ script });
   } catch (err) {
-    res.status(500).json({ error: err.message || 'Could not reach the LLM provider.' });
+    res.status(400).json({ error: err.message || 'Could not reach the LLM provider.' });
   }
 });
 
