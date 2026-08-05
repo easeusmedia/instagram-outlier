@@ -25,6 +25,7 @@
     --radius-lg: 20px;
     --radius-md: 14px;
     --radius-sm: 10px;
+    --reel-w: 140px; /* every reel-shaped card — standalone or inside a group — shares this width */
   }
   * { box-sizing: border-box; }
   html, body { height: 100%; }
@@ -176,7 +177,12 @@
   .canvas-header .save-status { color: var(--text-faint); font-size: 11.5px; margin-left: auto; margin-right: 4px; }
 
   .canvas-layout { flex: 1; display: flex; min-height: 0; position: relative; }
-  #drawflow { flex: 1; position: relative; background: var(--bg); overflow: hidden; }
+  #drawflow {
+    flex: 1; position: relative; overflow: hidden;
+    background:
+      radial-gradient(1100px 750px at 18% -10%, rgba(76,141,255,0.055), transparent 60%),
+      linear-gradient(180deg, #0b0c0e 0%, #06070800 55%, #000000 100%);
+  }
   .parent-drawflow { background: transparent !important; }
   .drawflow {
     background-image: radial-gradient(rgba(255,255,255,0.075) 1px, transparent 1px);
@@ -246,33 +252,43 @@
     background: rgba(0,0,0,0.5); backdrop-filter: blur(4px); border: none; color: #fff; display: flex; align-items: center; justify-content: center;
   }
   .reel-frame .score {
-    position: absolute; top: 7px; left: 7px; background: rgba(0,0,0,0.55); color: var(--accent); font-size: 10.5px; font-weight: 600;
-    padding: 3px 7px; border-radius: 6px; z-index: 2; letter-spacing: 0.01em;
+    position: absolute; top: 7px; left: 7px; z-index: 2; letter-spacing: 0.01em;
+    background: rgba(8,9,11,0.62); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+    border: 1px solid rgba(255,255,255,0.08);
+    font-size: 10.5px; font-weight: 700; padding: 3px 7px; border-radius: 6px;
   }
+  /* Outlier score reads at a glance: green = strong, yellow = average, red = weak. */
+  .reel-frame .score.score-hot { color: #4CFF9E; text-shadow: 0 0 10px rgba(76,255,158,0.45); }
+  .reel-frame .score.score-mid { color: #F3FF4C; text-shadow: 0 0 10px rgba(243,255,76,0.4); }
+  .reel-frame .score.score-low { color: #FF4C6A; text-shadow: 0 0 10px rgba(255,76,106,0.4); }
 
-  .video-node { width: 168px; }
+  .video-node { width: var(--reel-w); }
   .video-node .body { padding: 10px 12px 12px; }
   .video-node .handle { font-size: 11.5px; font-weight: 500; color: var(--text-dim); }
   .video-node .views { font-size: 11px; color: var(--text-faint); margin-top: 2px; }
   .video-node .node-actions { margin-top: 8px; }
   .video-node .node-actions button { width: 100%; font-size: 11px; padding: 6px 8px; }
 
-  .group-node { width: auto; max-width: 560px; }
+  .group-node { width: auto; max-width: 740px; }
   .group-node .head { display: flex; align-items: center; gap: 6px; padding: 11px 14px; border-bottom: 1px solid var(--border); }
   .group-node .head .name { font-weight: 500; font-size: 13px; flex: 1; color: var(--text); }
   .group-node .head input.rename-input { display: none; }
   .group-node .filmstrip { display: flex; gap: 8px; padding: 12px; overflow-x: auto; }
   .group-node .filmstrip::-webkit-scrollbar { height: 5px; }
   .group-node .filmstrip::-webkit-scrollbar-thumb { background: var(--border-hover); border-radius: 4px; }
-  .group-node .filmstrip .mini { width: 84px; flex-shrink: 0; }
+  .group-node .filmstrip .mini { width: var(--reel-w); flex-shrink: 0; }
   .group-node .filmstrip .mini .reel-frame { border-radius: var(--radius-sm); }
-  .group-node .filmstrip .mini .play-btn { width: 26px; height: 26px; }
-  .group-node .filmstrip .mini .handle { font-size: 9.5px; color: var(--text-faint); margin-top: 4px; text-align: center; }
+  .group-node .filmstrip .mini .handle { font-size: 11.5px; font-weight: 500; color: var(--text-dim); margin-top: 6px; text-align: center; }
+  .group-node .footer { padding: 0 14px 14px; }
+  .group-node .footer button { width: 100%; font-size: 11px; padding: 6px 8px; }
   .group-node .count { font-size: 11px; color: var(--text-faint); padding: 0 14px 12px; }
 
   .script-node { width: 260px; }
   .script-node .head { display: flex; align-items: center; gap: 8px; padding: 11px 14px; border-bottom: 1px solid var(--border); font-weight: 500; font-size: 13px; color: var(--text); }
   .script-node .text { max-height: 200px; overflow-y: auto; padding: 12px 14px; font-size: 11.5px; line-height: 1.6; color: var(--text-dim); white-space: pre-wrap; }
+  .script-node .source { padding: 0 14px 12px; }
+  .script-node .source a { font-size: 11px; color: var(--accent); text-decoration: none; }
+  .script-node .source a:hover { text-decoration: underline; }
 
   .chat-node { width: 320px; }
   .chat-node .head { display: flex; align-items: center; gap: 8px; padding: 13px 15px; border-bottom: 1px solid var(--border); font-weight: 500; font-size: 13px; color: var(--text); }
@@ -372,6 +388,8 @@
         <div class="sep"></div>
         <button class="icon-btn tiny" id="organize-btn" title="Arrange all nodes"></button>
         <button class="icon-btn tiny" id="recenter-btn" title="Recenter on your work"></button>
+        <div class="sep"></div>
+        <button class="icon-btn tiny" id="add-chat-btn" title="Add another AI Assistant"></button>
       </div>
     </div>
     <aside class="search-panel" id="search-panel">
@@ -468,6 +486,7 @@ $('zoom-in-btn').innerHTML = icon('zoomIn', { size: 14 });
 $('zoom-out-btn').innerHTML = icon('zoomOut', { size: 14 });
 $('organize-btn').innerHTML = icon('organize', { size: 13 });
 $('recenter-btn').innerHTML = icon('target', { size: 14 });
+$('add-chat-btn').innerHTML = icon('sparkle', { size: 13 }) + icon('plus', { size: 9 });
 $('connection-delete-btn').innerHTML = icon('close', { size: 11 });
 
 async function fetchJSON(url, opts = {}) {
@@ -487,6 +506,11 @@ function fmtNum(n) {
   if (n >= 1_000_000) return (n / 1_000_000).toFixed(1) + 'M';
   if (n >= 1_000) return (n / 1_000).toFixed(1) + 'K';
   return String(n);
+}
+// Outlier score at a glance: green = strong, yellow = average, red = weak.
+function scoreBadge(score) {
+  const cls = score == null ? '' : score >= 10 ? 'score-hot' : score >= 3 ? 'score-mid' : 'score-low';
+  return `<span class="score ${cls}">${score != null ? score.toFixed(1) + '×' : '—'}</span>`;
 }
 function imgFallback(el) {
   el.onerror = null;
@@ -670,7 +694,7 @@ function buildVideoNodeHtml(r) {
     <div class="video-node node-card">
       <button class="icon-btn tiny node-remove" title="Remove">${icon('close', { size: 11 })}</button>
       <div class="reel-frame">
-        <span class="score">${r.outlierScore != null ? r.outlierScore.toFixed(1) + '×' : '—'}</span>
+        ${scoreBadge(r.outlierScore)}
         <img class="thumb" src="${proxied(r.thumbnail)}" onerror="imgFallback(this)" draggable="false" />
         <button class="play-btn">${icon('play', { size: 15 })}</button>
       </div>
@@ -707,7 +731,7 @@ function wireVideoNode(nodeId) {
         state.editor.updateNodeDataFromId(nodeId, { ...data, transcript });
       }
       const pos = state.editor.drawflow.drawflow.Home.data[nodeId];
-      addScriptNode({ shortCode: data.shortCode, handle: data.handle, content: transcript }, pos.pos_x + 200, pos.pos_y);
+      addScriptNode({ shortCode: data.shortCode, handle: data.handle, url: data.url, content: transcript }, pos.pos_x + 200, pos.pos_y);
     } catch (err) {
       alert(err.message);
     } finally {
@@ -721,9 +745,9 @@ function buildMiniReelHtml(v, idx) {
   return `
     <div class="mini" data-idx="${idx}">
       <div class="reel-frame">
-        <span class="score">${v.outlierScore != null ? v.outlierScore.toFixed(1) + '×' : '—'}</span>
+        ${scoreBadge(v.outlierScore)}
         <img src="${proxied(v.thumbnail)}" onerror="imgFallback(this)" draggable="false" />
-        <button class="play-btn">${icon('play', { size: 12 })}</button>
+        <button class="play-btn">${icon('play', { size: 15 })}</button>
       </div>
       <div class="handle">@${escapeHtml(v.handle || '')}</div>
     </div>
@@ -742,6 +766,7 @@ function buildGroupNodeHtml(g) {
       </div>
       <div class="filmstrip">${items}</div>
       <div class="count">${g.videos.length} video${g.videos.length === 1 ? '' : 's'} — connect once to send them all</div>
+      <div class="footer"><button class="secondary get-script-btn">Get Script (all)</button></div>
     </div>
   `;
 }
@@ -758,6 +783,33 @@ function wireGroupNode(nodeId) {
       e.stopPropagation();
       playInline(mini.querySelector('.reel-frame'), data.videos[idx]);
     });
+  });
+  el.querySelector('.get-script-btn').addEventListener('click', async (e) => {
+    const btn = e.currentTarget;
+    btn.disabled = true;
+    const pos = state.editor.drawflow.drawflow.Home.data[nodeId];
+    const groupData = state.editor.drawflow.drawflow.Home.data[nodeId].data;
+    let placed = 0;
+    try {
+      for (const v of groupData.videos) {
+        btn.textContent = `Fetching @${v.handle}…`;
+        if (!v.transcript) {
+          v.transcript = (await fetchJSON(`/api/transcript?input=${encodeURIComponent(v.url)}`)).transcript;
+        }
+        addScriptNode(
+          { shortCode: v.shortCode, handle: v.handle, url: v.url, content: v.transcript },
+          pos.pos_x + 20 + placed * 280,
+          pos.pos_y + (document.getElementById(`node-${nodeId}`)?.offsetHeight || 300) + 40
+        );
+        placed += 1;
+      }
+      state.editor.updateNodeDataFromId(nodeId, groupData);
+    } catch (err) {
+      alert(err.message);
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Get Script (all)';
+    }
   });
   const nameEl = el.querySelector('.name');
   const inputEl = el.querySelector('.rename-input');
@@ -787,6 +839,7 @@ function buildScriptNodeHtml(s) {
       <button class="icon-btn tiny node-remove" title="Remove">${icon('close', { size: 11 })}</button>
       <div class="head">${icon('sparkle', { size: 14 })} Script — @${escapeHtml(s.handle || '')}</div>
       <div class="text">${escapeHtml(s.content)}</div>
+      ${s.url ? `<div class="source"><a href="${s.url}" target="_blank" rel="noopener">Open source on Instagram &rarr;</a></div>` : ''}
     </div>
   `;
 }
@@ -979,20 +1032,60 @@ function setZoom(newZoom, pivotX, pivotY) {
 function organizeNodes() {
   const editor = state.editor;
   const data = editor.drawflow.drawflow.Home.data;
-  const ids = Object.keys(data).map(Number).sort((a, b) => {
-    if (data[a].class === 'chat-node') return -1;
-    if (data[b].class === 'chat-node') return 1;
-    return a - b;
+  const gap = 56;
+  const allIds = Object.keys(data).map(Number);
+  if (!allIds.length) return;
+  const chatIds = allIds.filter((id) => data[id].class === 'chat-node');
+  const sourceIds = allIds.filter((id) => data[id].class !== 'chat-node');
+
+  // Measure real rendered sizes — a group node and a video node are very
+  // different shapes, so a fixed grid cell overlaps one or the other. Pack
+  // using each column's widest node and each row's tallest node instead.
+  const dims = {};
+  allIds.forEach((id) => {
+    const el = document.getElementById(`node-${id}`);
+    dims[id] = { w: el ? el.offsetWidth : 220, h: el ? el.offsetHeight : 300 };
   });
-  const colWidth = 260, rowHeight = 340, perRow = 4;
-  ids.forEach((id, i) => {
-    const col = i % perRow, row = Math.floor(i / perRow);
-    const x = col * colWidth, y = row * rowHeight;
+
+  const perRow = Math.max(1, Math.round(Math.sqrt(sourceIds.length || 1)));
+  const rows = [];
+  for (let i = 0; i < sourceIds.length; i += perRow) rows.push(sourceIds.slice(i, i + perRow));
+  const colWidths = [];
+  rows.forEach((row) => row.forEach((id, c) => { colWidths[c] = Math.max(colWidths[c] || 0, dims[id].w); }));
+
+  const positions = {};
+  let y = 0;
+  rows.forEach((row) => {
+    let x = 0;
+    let rowHeight = 0;
+    row.forEach((id, c) => {
+      positions[id] = { x, y };
+      x += colWidths[c] + gap;
+      rowHeight = Math.max(rowHeight, dims[id].h);
+    });
+    y += rowHeight + gap;
+  });
+  const gridWidth = colWidths.reduce((a, b) => a + b, 0) + gap * Math.max(0, colWidths.length - 1);
+  const gridHeight = y - gap;
+
+  // Chat node(s) get their own column to the right, vertically centered
+  // against the source grid so connections fan out symmetrically instead
+  // of criss-crossing at odd angles.
+  const chatX = gridWidth + gap * 2;
+  const chatTotalHeight = chatIds.reduce((sum, id) => sum + dims[id].h, 0) + gap * Math.max(0, chatIds.length - 1);
+  let chatY = Math.max(0, (gridHeight - chatTotalHeight) / 2);
+  chatIds.forEach((id) => {
+    positions[id] = { x: chatX, y: chatY };
+    chatY += dims[id].h + gap;
+  });
+
+  Object.keys(positions).forEach((id) => {
+    const { x, y } = positions[id];
     data[id].pos_x = x; data[id].pos_y = y;
     const el = document.getElementById(`node-${id}`);
     if (el) { el.style.left = `${x}px`; el.style.top = `${y}px`; }
-    editor.updateConnectionNodes(`node-${id}`);
   });
+  allIds.forEach((id) => editor.updateConnectionNodes(`node-${id}`));
   saveCanvasState();
 }
 // Fits the viewport to whatever's actually on the canvas, instead of just
@@ -1083,6 +1176,12 @@ function initEditor() {
   $('zoom-out-btn').addEventListener('click', () => setZoom(editor.zoom * 0.87));
   $('organize-btn').addEventListener('click', organizeNodes);
   $('recenter-btn').addEventListener('click', recenterOnContent);
+  $('add-chat-btn').addEventListener('click', () => {
+    const centerX = (editor.container.clientWidth / 2) / editor.zoom - editor.canvas_x / editor.zoom;
+    const centerY = (editor.container.clientHeight / 2) / editor.zoom - editor.canvas_y / editor.zoom;
+    const id = editor.addNode('chat', 1, 0, centerX, centerY, 'chat-node', {}, buildChatNodeHtml());
+    wireChatNode(id);
+  });
 
   function clientToCanvas(clientX, clientY) {
     const rect = container.getBoundingClientRect();
@@ -1162,7 +1261,7 @@ function renderResults() {
     card.innerHTML = `
       <input type="checkbox" class="checkbox check" ${checked ? 'checked' : ''} />
       <div class="reel-frame">
-        <span class="score">${r.outlierScore != null ? r.outlierScore.toFixed(1) + '×' : '—'}</span>
+        ${scoreBadge(r.outlierScore)}
         <img src="${proxied(r.thumbnail)}" onerror="imgFallback(this)" draggable="false" />
         <button class="play-btn">${icon('play', { size: 13 })}</button>
         <button class="add-btn" title="Add to canvas">${icon('plus', { size: 13 })}</button>
