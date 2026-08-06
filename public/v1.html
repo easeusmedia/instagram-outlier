@@ -217,21 +217,16 @@
   .header-hideable { display: flex; align-items: center; gap: 10px; flex: 1; min-width: 0; }
   /* settings-btn's own margin-left:auto is what actually pins it (and
      panel-toggle-btn right after it) to the right edge — header-hideable's
-     flex:1 already does that job while it's visible, but once it's
-     collapsed and out of the flex row, something still needs to push
-     these two over instead of them snapping to the left. */
+     flex:1 already reserves that same space whether it's visible or
+     faded out below, so this keeps them put either way. */
   #settings-btn { margin-left: auto; }
-  /* Only relevant in fullscreen — outside it the header always stays put,
-     collapsing it would just be a pointless extra click. */
-  #header-collapse-btn { display: none; }
-  .is-fullscreen #header-collapse-btn { display: inline-flex; }
-  #header-collapse-btn .icon { transition: transform 0.15s; }
-  .is-fullscreen:not(.header-collapsed) #header-collapse-btn .icon { transform: rotate(180deg); }
-  /* Fullscreen starts collapsed by default to reclaim screen space, but
-     unlike the header-hideable div, this class isn't tied to fullscreen
-     itself — the collapse button above toggles it independently, so the
-     header can be brought back without leaving fullscreen. */
-  .header-collapsed .header-hideable { display: none; }
+  /* Fullscreen: the title/back/rename cluster fades out on its own once
+     the cursor leaves the header — no click, no separate toggle button —
+     and fades back in the instant it's hovered again. header-hideable
+     keeps its flex:1 layout space throughout (just invisible), so nothing
+     else in the row ever shifts when it fades. */
+  .is-fullscreen .header-hideable { opacity: 0; pointer-events: none; transition: opacity 0.15s ease; }
+  .is-fullscreen .canvas-header:hover .header-hideable { opacity: 1; pointer-events: auto; }
 
   .canvas-layout { flex: 1; display: flex; min-height: 0; position: relative; }
   /* The dot grid lives on this outer, never-transformed container (not on
@@ -487,10 +482,6 @@
 
 <div id="canvas-view" style="display:none">
   <div class="canvas-header" id="canvas-header">
-    <!-- Only shown in fullscreen, where header-hideable starts collapsed
-         to reclaim screen space — this is what brings it back on demand
-         instead of it being unreachable until you exit fullscreen. -->
-    <button class="icon-btn" id="header-collapse-btn" title="Show header"></button>
     <div class="header-hideable" id="header-hideable">
       <button class="icon-btn" id="back-btn" title="Back to spaces"></button>
       <h2 id="space-name"></h2>
@@ -698,7 +689,6 @@ function icon(name, { size = 16 } = {}) {
 $('back-btn').innerHTML = icon('back', { size: 17 });
 $('rename-space-btn').innerHTML = icon('edit', { size: 12 });
 $('settings-btn').innerHTML = icon('settings', { size: 16 });
-$('header-collapse-btn').innerHTML = icon('chev', { size: 13 });
 $('settings-close').innerHTML = icon('close', { size: 12 });
 $('panel-toggle-btn').innerHTML = icon('panel', { size: 17 });
 $('zoom-in-btn').innerHTML = icon('zoomIn', { size: 14 });
@@ -1766,13 +1756,6 @@ function initEditor() {
   document.addEventListener('fullscreenchange', () => {
     $('fullscreen-btn').innerHTML = icon(document.fullscreenElement ? 'shrink' : 'expand', { size: 14 });
     document.body.classList.toggle('is-fullscreen', !!document.fullscreenElement);
-    // Fullscreen starts collapsed by default to reclaim screen space;
-    // leaving fullscreen always restores it so it's never stuck hidden.
-    if (document.fullscreenElement) document.body.classList.add('header-collapsed');
-    else document.body.classList.remove('header-collapsed');
-  });
-  $('header-collapse-btn').addEventListener('click', () => {
-    document.body.classList.toggle('header-collapsed');
   });
 
   function clientToCanvas(clientX, clientY) {
