@@ -207,13 +207,18 @@
   }
   .canvas-header h2 { font-size: 14.5px; font-weight: 500; color: var(--text); }
   .canvas-header .save-status { color: var(--text-faint); font-size: 11.5px; margin-left: auto; margin-right: 4px; }
-  /* Fullscreen: the whole header (title, back, rename, settings) just
-     disappears outright — no hover-to-reveal. Reappears automatically on
-     exiting fullscreen since this is the only thing gating it. */
-  .is-fullscreen .canvas-header { display: none; }
-  /* Lives outside .canvas-header so it's still reachable in fullscreen —
-     fixed in both modes, so it doesn't visibly jump when toggling. */
-  #panel-toggle-btn { position: fixed; top: 14px; right: 22px; z-index: 45; }
+  .header-hideable { display: flex; align-items: center; gap: 10px; flex: 1; min-width: 0; }
+  /* panel-toggle-btn's own margin-left:auto is what actually pins it to
+     the right edge — header-hideable's flex:1 already does that job while
+     visible, but once fullscreen hides header-hideable entirely, toggle
+     is the only child left and needs its own auto-margin to stay put
+     instead of snapping to the left. Same element, same flex row, in both
+     modes — no separate fixed positioning to collide with anything. */
+  #panel-toggle-btn { margin-left: auto; }
+  /* Fullscreen: everything but the panel toggle disappears outright — no
+     hover-to-reveal. Reappears automatically on exiting fullscreen since
+     this is the only thing gating it. */
+  .is-fullscreen .header-hideable { display: none; }
 
   .canvas-layout { flex: 1; display: flex; min-height: 0; position: relative; }
   /* The dot grid lives on this outer, never-transformed container (not on
@@ -343,9 +348,7 @@
   .group-node .filmstrip .mini { width: var(--reel-w); flex-shrink: 0; }
   .group-node .filmstrip .mini .reel-frame { border-radius: var(--radius-sm); }
   .group-node .filmstrip .mini .reel-meta { padding: 8px 2px 0; }
-  .group-node .footer { padding: 0 14px 14px; }
-  .group-node .footer button { width: 100%; font-size: 11px; padding: 6px 8px; }
-  .group-node .count { font-size: 11px; color: var(--text-faint); padding: 0 14px 12px; }
+  .group-node .count { font-size: 11px; color: var(--text-faint); padding: 0 14px 14px; }
 
   .script-node { width: 260px; }
   .script-node .head { display: flex; align-items: center; gap: 8px; padding: 11px 14px; border-bottom: 1px solid var(--border); font-weight: 500; font-size: 13px; color: var(--text); }
@@ -471,15 +474,19 @@
 
 <div id="canvas-view" style="display:none">
   <div class="canvas-header" id="canvas-header">
-    <button class="icon-btn" id="back-btn" title="Back to spaces"></button>
-    <h2 id="space-name"></h2>
-    <button class="icon-btn tiny" id="rename-space-btn" title="Rename space"></button>
-    <div class="save-status" id="save-status"></div>
-    <button class="icon-btn" id="settings-btn" title="Settings"></button>
+    <div class="header-hideable" id="header-hideable">
+      <button class="icon-btn" id="back-btn" title="Back to spaces"></button>
+      <h2 id="space-name"></h2>
+      <button class="icon-btn tiny" id="rename-space-btn" title="Rename space"></button>
+      <div class="save-status" id="save-status"></div>
+      <button class="icon-btn" id="settings-btn" title="Settings"></button>
+    </div>
+    <!-- Stays in the header's own flex flow (margin-left:auto keeps it
+         pinned to the right edge whether header-hideable is shown or, in
+         fullscreen, hidden) — no separate fixed positioning to fight with
+         anything else up here. -->
+    <button class="icon-btn" id="panel-toggle-btn" title="Toggle creator panel"></button>
   </div>
-  <!-- Lives outside .canvas-header (fixed, always at top-right) so it stays
-       reachable even in fullscreen, when the rest of the header is hidden. -->
-  <button class="icon-btn" id="panel-toggle-btn" title="Toggle creator panel"></button>
   <div class="canvas-layout">
     <div id="drawflow">
       <div class="connection-delete-btn" id="connection-delete-btn" title="Remove connection"></div>
@@ -537,6 +544,17 @@
     <div class="modal-actions">
       <button class="secondary" id="name-modal-cancel">Cancel</button>
       <button class="primary" id="name-modal-ok">Create</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="confirm-modal">
+  <div class="modal" style="width:360px">
+    <h3 id="confirm-modal-title">Are you sure?</h3>
+    <p class="modal-desc" id="confirm-modal-desc"></p>
+    <div class="modal-actions">
+      <button class="secondary" id="confirm-modal-cancel">Cancel</button>
+      <button class="primary" id="confirm-modal-ok">Confirm</button>
     </div>
   </div>
 </div>
@@ -762,6 +780,32 @@ function openNameModal({ title, desc = '', placeholder = '', value = '', okLabel
   });
 }
 
+// In-app replacement for window.confirm() — same "are you sure" purpose,
+// but styled to match everything else instead of the browser's own ugly
+// "localhost:3000 says" dialog.
+function openConfirmModal({ title = 'Are you sure?', desc = '', okLabel = 'Confirm' } = {}) {
+  return new Promise((resolve) => {
+    $('confirm-modal-title').textContent = title;
+    $('confirm-modal-desc').textContent = desc;
+    $('confirm-modal-ok').textContent = okLabel;
+    $('confirm-modal').classList.add('open');
+
+    function cleanup(result) {
+      $('confirm-modal').classList.remove('open');
+      $('confirm-modal-ok').removeEventListener('click', onOk);
+      $('confirm-modal-cancel').removeEventListener('click', onCancel);
+      document.removeEventListener('keydown', onKey);
+      resolve(result);
+    }
+    function onOk() { cleanup(true); }
+    function onCancel() { cleanup(false); }
+    function onKey(e) { if (e.key === 'Enter') onOk(); if (e.key === 'Escape') onCancel(); }
+    $('confirm-modal-ok').addEventListener('click', onOk);
+    $('confirm-modal-cancel').addEventListener('click', onCancel);
+    document.addEventListener('keydown', onKey);
+  });
+}
+
 // Shows a video/script/AI-output's text content read-only — backs the
 // per-card "Get Transcript" kebab item and the clickable attachment chips
 // on a chat node. `getContent` may be a plain string or a function
@@ -848,7 +892,8 @@ async function loadSpacesView() {
           loadSpacesView();
         } },
         { label: 'Delete', danger: true, onClick: async () => {
-          if (!confirm(`Delete "${s.name}"? This can't be undone.`)) return;
+          const ok = await openConfirmModal({ title: `Delete "${s.name}"?`, desc: "This can't be undone.", okLabel: 'Delete' });
+          if (!ok) return;
           await fetchJSON(`/api/spaces/${s.id}`, { method: 'DELETE' });
           loadSpacesView();
         } },
@@ -1023,7 +1068,6 @@ function buildGroupNodeHtml(g) {
       </div>
       <div class="filmstrip">${items}</div>
       <div class="count">${g.videos.length} video${g.videos.length === 1 ? '' : 's'} — connect once to send them all</div>
-      <div class="footer"><button class="secondary get-script-btn">Get Script (all)</button></div>
     </div>
   `;
 }
@@ -1039,35 +1083,6 @@ function wireGroupNode(nodeId) {
       getData: () => state.editor.drawflow.drawflow.Home.data[nodeId].data.videos[idx],
       ensureTranscript: () => ensureGroupVideoTranscript(nodeId, idx),
     });
-  });
-  const groupScriptBtn = el.querySelector('.get-script-btn');
-  preventNodeDrag(groupScriptBtn);
-  groupScriptBtn.addEventListener('click', async (e) => {
-    const btn = e.currentTarget;
-    btn.disabled = true;
-    const pos = state.editor.drawflow.drawflow.Home.data[nodeId];
-    const groupData = state.editor.drawflow.drawflow.Home.data[nodeId].data;
-    let placed = 0;
-    try {
-      for (const v of groupData.videos) {
-        btn.textContent = `Fetching @${v.handle}…`;
-        if (!v.transcript) {
-          v.transcript = (await fetchJSON(`/api/transcript?input=${encodeURIComponent(v.url)}`)).transcript;
-        }
-        addScriptNode(
-          { shortCode: v.shortCode, handle: v.handle, url: v.url, content: v.transcript },
-          pos.pos_x + 20 + placed * 280,
-          pos.pos_y + (document.getElementById(`node-${nodeId}`)?.offsetHeight || 300) + 40
-        );
-        placed += 1;
-      }
-      state.editor.updateNodeDataFromId(nodeId, groupData);
-    } catch (err) {
-      alert(err.message);
-    } finally {
-      btn.disabled = false;
-      btn.textContent = 'Get Script (all)';
-    }
   });
   const nameEl = el.querySelector('.name');
   const inputEl = el.querySelector('.rename-input');
@@ -1104,11 +1119,6 @@ function buildScriptNodeHtml(s) {
   `;
 }
 
-function addScriptNode(s, x, y) {
-  const id = state.editor.addNode('script', 0, 1, x, y, 'script-node', s, buildScriptNodeHtml(s));
-  wireScriptNode(id);
-  return id;
-}
 function wireScriptNode(nodeId) {
   const el = document.getElementById(`node-${nodeId}`);
   if (!el || el.dataset.wired) return;
@@ -1604,6 +1614,27 @@ function initEditor() {
   editor.reroute = true;
   editor.start();
   state.editor = editor;
+
+  // Drawflow ALSO implements its own two-finger pinch-zoom, entirely
+  // separate from the ctrl+wheel path above — via raw onpointerdown/move/up
+  // properties (not addEventListener) that track two simultaneous pointers
+  // and, on pinch, call its own zoom_in()/zoom_out(), which scale
+  // canvas_x/canvas_y around the canvas origin, not the cursor. On a
+  // trackpad that reports pinch as pointer events instead of synthetic
+  // wheel events, this is what actually ran — completely bypassing our
+  // cursor-anchored setZoom no matter how correct that math was, which is
+  // why fixing the wheel handler alone never fixed the reported "zooms at
+  // some fixed corner, not my cursor" behavior. Since these are plain
+  // property assignments (only one handler each), overwriting them here
+  // fully removes it — pointerdown/up only ever fed that same pinch
+  // tracker, so nothing else depends on them; node drag/connect are all
+  // separate mouse-event listeners, untouched.
+  container.onpointerdown = null;
+  container.onpointermove = null;
+  container.onpointerup = null;
+  container.onpointercancel = null;
+  container.onpointerout = null;
+  container.onpointerleave = null;
 
   // Drawflow also lets you pan by dragging empty canvas directly, which
   // writes to precanvas.style.transform itself — bypassing our
@@ -2212,7 +2243,8 @@ function renderManageMatrix() {
   table.querySelectorAll('.cat-del-btn').forEach((btn) => {
     btn.addEventListener('click', async () => {
       const cat = categories.find((c) => c.id === Number(btn.dataset.id));
-      if (!confirm(`Delete category "${cat.name}"? Its creators stay tracked.`)) return;
+      const ok = await openConfirmModal({ title: `Delete category "${cat.name}"?`, desc: 'Its creators stay tracked.', okLabel: 'Delete' });
+      if (!ok) return;
       await fetchJSON(`/api/creator-categories/${cat.id}`, { method: 'DELETE' });
       await loadTrackedCategories();
       renderManageMatrix();
@@ -2221,7 +2253,8 @@ function renderManageMatrix() {
   table.querySelectorAll('.untrack-btn').forEach((btn) => {
     btn.addEventListener('click', async () => {
       const handle = btn.dataset.handle;
-      if (!confirm(`Stop tracking @${handle}?`)) return;
+      const ok = await openConfirmModal({ title: `Stop tracking @${handle}?`, okLabel: 'Stop tracking' });
+      if (!ok) return;
       await fetchJSON('/api/bookmarks', { method: 'POST', body: { handle, action: 'remove' } });
       state.checkedHandles.delete(handle);
       removeFromPoolByHandle(handle);
