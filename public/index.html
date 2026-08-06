@@ -1160,12 +1160,17 @@ $('apify-key-test-btn').addEventListener('click', async () => {
 });
 
 $('apify-key-save-btn').addEventListener('click', async () => {
+  const btn = $('apify-key-save-btn');
   const apiKey = $('apify-key-input').value.trim();
   if (!apiKey) return setKeyStatus('Enter a key to save.', 'info');
   try {
     await fetchJSON('/api/settings/apify-key', { method: 'POST', body: { apiKey } });
-    setKeyStatus('Saved.', 'ok');
+    // loadApifyKeyStatus() below immediately overwrites the status line with
+    // "Using a saved custom key." — a "Saved." message there would never
+    // actually be seen. Flash it on the button itself instead.
     await loadApifyKeyStatus();
+    btn.textContent = 'Saved ✓';
+    setTimeout(() => { btn.textContent = 'Save Key'; }, 1500);
   } catch (err) {
     setKeyStatus(err.message, 'error');
   }

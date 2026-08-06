@@ -207,6 +207,17 @@
   }
   .canvas-header h2 { font-size: 14.5px; font-weight: 500; color: var(--text); }
   .canvas-header .save-status { color: var(--text-faint); font-size: 11.5px; margin-left: auto; margin-right: 4px; }
+  /* Fullscreen: the header slides fully out of view (taken out of flex flow
+     so the canvas grows to fill the space) and only reappears while the
+     mouse is up near the very top edge, or over the header itself once
+     it's peeking down. */
+  .is-fullscreen .canvas-header {
+    position: fixed; left: 0; right: 0; z-index: 40;
+    top: -90px; transition: top .2s ease;
+  }
+  .is-fullscreen .canvas-header.header-visible { top: 0; }
+  .fullscreen-hover-strip { display: none; }
+  .is-fullscreen .fullscreen-hover-strip { display: block; position: fixed; top: 0; left: 0; right: 0; height: 10px; z-index: 39; }
 
   .canvas-layout { flex: 1; display: flex; min-height: 0; position: relative; }
   /* The dot grid lives on this outer, never-transformed container (not on
@@ -294,7 +305,9 @@
   .reel-frame .play-btn {
     position: absolute; inset: 0; margin: auto; width: 38px; height: 38px; border-radius: 50%;
     background: rgba(0,0,0,0.5); backdrop-filter: blur(4px); border: none; color: #fff; display: flex; align-items: center; justify-content: center;
+    opacity: 0; transition: opacity .15s;
   }
+  .reel-frame:hover .play-btn { opacity: 1; }
   .reel-frame .score {
     position: absolute; top: 7px; left: 7px; z-index: 2; letter-spacing: 0.01em;
     background: rgba(8,9,11,0.62); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
@@ -318,7 +331,8 @@
   /* Every reel card — standalone video-node or a mini inside a group —
      shares this same body markup so they're pixel-identical everywhere. */
   .reel-meta { padding: 10px 12px 12px; }
-  .reel-meta .handle { font-size: 11.5px; font-weight: 500; color: var(--text-dim); }
+  .reel-meta .handle { font-size: 11.5px; font-weight: 500; color: var(--text-dim); text-decoration: none; display: inline-block; }
+  .reel-meta a.handle:hover { color: var(--text); text-decoration: underline; }
   .reel-meta .views { font-size: 11px; color: var(--text-faint); margin-top: 2px; }
 
   .video-node { width: var(--reel-w); }
@@ -460,7 +474,8 @@
 </div>
 
 <div id="canvas-view" style="display:none">
-  <div class="canvas-header">
+  <div class="fullscreen-hover-strip" id="fullscreen-hover-strip"></div>
+  <div class="canvas-header" id="canvas-header">
     <button class="icon-btn" id="back-btn" title="Back to spaces"></button>
     <h2 id="space-name"></h2>
     <button class="icon-btn tiny" id="rename-space-btn" title="Rename space"></button>
@@ -917,7 +932,7 @@ function buildReelFrame(v) {
       <button class="icon-btn tiny menu-btn" title="More">${icon('more', { size: 12 })}</button>
     </div>
     <div class="reel-meta">
-      <div class="handle">@${escapeHtml(v.handle || '')}</div>
+      ${v.url ? `<a class="handle" href="${v.url}" target="_blank" rel="noopener">@${escapeHtml(v.handle || '')}</a>` : `<div class="handle">@${escapeHtml(v.handle || '')}</div>`}
       <div class="views">${fmtNum(v.views)} views</div>
     </div>
   `;
@@ -970,6 +985,7 @@ function wireReelFrame(el, { getData, ensureTranscript }) {
       { label: 'Get Transcript', onClick: () => openTranscriptModal(`@${data.handle}`, ensureTranscript) },
     ]);
   });
+  preventNodeDrag(el.querySelector('a.handle'));
 }
 
 function buildVideoNodeHtml(r) {
@@ -1676,7 +1692,14 @@ function initEditor() {
   });
   document.addEventListener('fullscreenchange', () => {
     $('fullscreen-btn').innerHTML = icon(document.fullscreenElement ? 'shrink' : 'expand', { size: 14 });
+    document.body.classList.toggle('is-fullscreen', !!document.fullscreenElement);
+    $('canvas-header').classList.remove('header-visible');
   });
+  const showHeader = () => $('canvas-header').classList.add('header-visible');
+  const hideHeader = () => $('canvas-header').classList.remove('header-visible');
+  $('fullscreen-hover-strip').addEventListener('mouseenter', showHeader);
+  $('canvas-header').addEventListener('mouseenter', showHeader);
+  $('canvas-header').addEventListener('mouseleave', hideHeader);
 
   function clientToCanvas(clientX, clientY) {
     const rect = container.getBoundingClientRect();
@@ -1831,12 +1854,18 @@ $('apify-key-test-btn').addEventListener('click', async () => {
   }
 });
 $('apify-key-save-btn').addEventListener('click', async () => {
+  const btn = $('apify-key-save-btn');
   const apiKey = $('apify-key-input').value.trim();
   if (!apiKey) return setKeyStatus('Enter a key to save.', 'info');
   try {
     await fetchJSON('/api/settings/apify-key', { method: 'POST', body: { apiKey } });
-    setKeyStatus('Saved.', 'ok');
+    // loadApifyKeyStatus() below immediately overwrites the status line with
+    // "Using a saved custom key." — a "Saved." message there would never
+    // actually be seen. Flash it on the button itself instead, same as the
+    // LLM save button already does.
     await loadApifyKeyStatus();
+    btn.textContent = 'Saved ✓';
+    setTimeout(() => { btn.textContent = 'Save Key'; }, 1500);
   } catch (err) {
     setKeyStatus(err.message, 'error');
   }
