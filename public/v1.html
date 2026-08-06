@@ -1610,6 +1610,20 @@ function initEditor() {
     }
   }, { passive: false });
 
+  // Safari (desktop) reports trackpad pinch through its own proprietary
+  // gesturestart/gesturechange/gestureend events — completely separate
+  // from the wheel+ctrlKey events Chrome/Firefox send, which the listener
+  // above already owns. Left alone, Safari's default action for those is
+  // to zoom the *entire page* natively, which fires at the same time as
+  // our cursor-anchored canvas zoom and fights it — that's what actually
+  // produced "zooms to some corner, not my cursor" on a trackpad: two
+  // independent, differently-anchored zooms racing each other, not a bug
+  // in the canvas math (verified pixel-exact by direct dispatch). No-op
+  // on Chrome/Firefox, which don't fire these events at all.
+  ['gesturestart', 'gesturechange', 'gestureend'].forEach((type) => {
+    document.addEventListener(type, (e) => e.preventDefault());
+  });
+
   editor = new Drawflow(container);
   editor.reroute = true;
   editor.start();
