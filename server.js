@@ -1048,6 +1048,25 @@ async function migrateOutlierScores() {
 }
 await migrateOutlierScores();
 
+// One-time: every reel cached before the videoPlayCount fix above has a
+// views count several times lower than what Instagram actually shows
+// (confirmed directly against a live reel: cached 70K vs. Instagram's own
+// 242K, matching videoPlayCount exactly) — and since the weekly refresh
+// cooldown blocks re-scraping a creator that's already been "checked"
+// recently, that stale number would otherwise just sit there for up to
+// another 7 days rather than fixing itself. Clearing creator_checks once
+// forces every tracked creator's next /api/creator call past that
+// cooldown so they get re-scraped with the corrected field. Guarded by a
+// settings flag (unlike migrateOutlierScores above) since, unlike that
+// pure local recompute, this trades away everyone's remaining cooldown —
+// fine once, not on every boot.
+async function migrateStaleViewCounts() {
+  if (await queryOne("SELECT value FROM settings WHERE key = 'viewsMigrationV1'")) return;
+  await run('DELETE FROM creator_checks');
+  await run("INSERT INTO settings (key, value) VALUES ('viewsMigrationV1', '1')");
+}
+await migrateStaleViewCounts();
+
 app.listen(PORT, () => {
   console.log(`Instagram Outlier running at http://localhost:${PORT}`);
 });
