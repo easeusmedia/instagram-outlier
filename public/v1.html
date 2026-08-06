@@ -3,12 +3,19 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<!-- Tells the browser to paint its own default backdrop dark before any
+     CSS has loaded — without it, the render-blocking stylesheets below
+     (Google Fonts, Drawflow's CSS, both fetched over the network) leave a
+     brief white flash on load/reload, since the browser's own default
+     canvas is white until *something* tells it otherwise. -->
+<meta name="color-scheme" content="dark" />
 <title>Instagram Outlier — v1</title>
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/jerosoler/Drawflow/dist/drawflow.min.css">
 <style>
   :root {
+    color-scheme: dark;
     --bg: #060708;
     --surface: rgba(255,255,255,0.032);
     --surface-2: rgba(255,255,255,0.055);
