@@ -208,17 +208,23 @@
   .canvas-header h2 { font-size: 14.5px; font-weight: 500; color: var(--text); }
   .canvas-header .save-status { color: var(--text-faint); font-size: 11.5px; margin-left: auto; margin-right: 4px; }
   .header-hideable { display: flex; align-items: center; gap: 10px; flex: 1; min-width: 0; }
-  /* panel-toggle-btn's own margin-left:auto is what actually pins it to
-     the right edge — header-hideable's flex:1 already does that job while
-     visible, but once fullscreen hides header-hideable entirely, toggle
-     is the only child left and needs its own auto-margin to stay put
-     instead of snapping to the left. Same element, same flex row, in both
-     modes — no separate fixed positioning to collide with anything. */
-  #panel-toggle-btn { margin-left: auto; }
-  /* Fullscreen: everything but the panel toggle disappears outright — no
-     hover-to-reveal. Reappears automatically on exiting fullscreen since
-     this is the only thing gating it. */
-  .is-fullscreen .header-hideable { display: none; }
+  /* settings-btn's own margin-left:auto is what actually pins it (and
+     panel-toggle-btn right after it) to the right edge — header-hideable's
+     flex:1 already does that job while it's visible, but once it's
+     collapsed and out of the flex row, something still needs to push
+     these two over instead of them snapping to the left. */
+  #settings-btn { margin-left: auto; }
+  /* Only relevant in fullscreen — outside it the header always stays put,
+     collapsing it would just be a pointless extra click. */
+  #header-collapse-btn { display: none; }
+  .is-fullscreen #header-collapse-btn { display: inline-flex; }
+  #header-collapse-btn .icon { transition: transform 0.15s; }
+  .is-fullscreen:not(.header-collapsed) #header-collapse-btn .icon { transform: rotate(180deg); }
+  /* Fullscreen starts collapsed by default to reclaim screen space, but
+     unlike the header-hideable div, this class isn't tied to fullscreen
+     itself — the collapse button above toggles it independently, so the
+     header can be brought back without leaving fullscreen. */
+  .header-collapsed .header-hideable { display: none; }
 
   .canvas-layout { flex: 1; display: flex; min-height: 0; position: relative; }
   /* The dot grid lives on this outer, never-transformed container (not on
@@ -474,17 +480,22 @@
 
 <div id="canvas-view" style="display:none">
   <div class="canvas-header" id="canvas-header">
+    <!-- Only shown in fullscreen, where header-hideable starts collapsed
+         to reclaim screen space — this is what brings it back on demand
+         instead of it being unreachable until you exit fullscreen. -->
+    <button class="icon-btn" id="header-collapse-btn" title="Show header"></button>
     <div class="header-hideable" id="header-hideable">
       <button class="icon-btn" id="back-btn" title="Back to spaces"></button>
       <h2 id="space-name"></h2>
       <button class="icon-btn tiny" id="rename-space-btn" title="Rename space"></button>
       <div class="save-status" id="save-status"></div>
-      <button class="icon-btn" id="settings-btn" title="Settings"></button>
     </div>
-    <!-- Stays in the header's own flex flow (margin-left:auto keeps it
-         pinned to the right edge whether header-hideable is shown or, in
-         fullscreen, hidden) — no separate fixed positioning to fight with
-         anything else up here. -->
+    <!-- settings-btn and panel-toggle-btn stay in the header's own flex
+         flow (margin-left:auto on settings-btn keeps both pinned to the
+         right edge whether header-hideable is shown or collapsed) — kept
+         outside header-hideable so they're always reachable, even with
+         the rest of the header collapsed in fullscreen. -->
+    <button class="icon-btn" id="settings-btn" title="Settings"></button>
     <button class="icon-btn" id="panel-toggle-btn" title="Toggle creator panel"></button>
   </div>
   <div class="canvas-layout">
@@ -680,6 +691,7 @@ function icon(name, { size = 16 } = {}) {
 $('back-btn').innerHTML = icon('back', { size: 17 });
 $('rename-space-btn').innerHTML = icon('edit', { size: 12 });
 $('settings-btn').innerHTML = icon('settings', { size: 16 });
+$('header-collapse-btn').innerHTML = icon('chev', { size: 13 });
 $('settings-close').innerHTML = icon('close', { size: 12 });
 $('panel-toggle-btn').innerHTML = icon('panel', { size: 17 });
 $('zoom-in-btn').innerHTML = icon('zoomIn', { size: 14 });
@@ -1705,18 +1717,27 @@ function initEditor() {
     hideConnectionDelete();
   });
 
+  // The wheel/pinch path already anchors on the exact event's own
+  // clientX/Y. The keyboard shortcuts and the +/- toolbar buttons don't
+  // carry a cursor position of their own, so they used to always zoom on
+  // the container's center — tracking the cursor's last position over the
+  // canvas here lets them anchor on it too, same as everywhere else.
+  let lastPointer = null;
+  container.addEventListener('mousemove', (e) => { lastPointer = { x: e.clientX, y: e.clientY }; });
+  container.addEventListener('mouseleave', () => { lastPointer = null; });
+
   document.addEventListener('keydown', (e) => {
     if (!(e.ctrlKey || e.metaKey)) return;
     const tag = document.activeElement?.tagName;
     if (tag === 'INPUT' || tag === 'TEXTAREA') return; // let native undo work in text fields
-    if (e.key === '+' || e.key === '=') { e.preventDefault(); setZoom(editor.zoom * 1.15); }
-    else if (e.key === '-') { e.preventDefault(); setZoom(editor.zoom * 0.87); }
+    if (e.key === '+' || e.key === '=') { e.preventDefault(); setZoom(editor.zoom * 1.15, lastPointer?.x, lastPointer?.y); }
+    else if (e.key === '-') { e.preventDefault(); setZoom(editor.zoom * 0.87, lastPointer?.x, lastPointer?.y); }
     else if (e.key.toLowerCase() === 'z' && e.shiftKey) { e.preventDefault(); redoCanvas(); }
     else if (e.key.toLowerCase() === 'z') { e.preventDefault(); undoCanvas(); }
     else if (e.key.toLowerCase() === 'y') { e.preventDefault(); redoCanvas(); }
   });
-  $('zoom-in-btn').addEventListener('click', () => setZoom(editor.zoom * 1.15));
-  $('zoom-out-btn').addEventListener('click', () => setZoom(editor.zoom * 0.87));
+  $('zoom-in-btn').addEventListener('click', () => setZoom(editor.zoom * 1.15, lastPointer?.x, lastPointer?.y));
+  $('zoom-out-btn').addEventListener('click', () => setZoom(editor.zoom * 0.87, lastPointer?.x, lastPointer?.y));
   $('organize-btn').addEventListener('click', organizeNodes);
   $('recenter-btn').addEventListener('click', recenterOnContent);
   $('add-chat-btn').addEventListener('click', () => {
@@ -1737,6 +1758,13 @@ function initEditor() {
   document.addEventListener('fullscreenchange', () => {
     $('fullscreen-btn').innerHTML = icon(document.fullscreenElement ? 'shrink' : 'expand', { size: 14 });
     document.body.classList.toggle('is-fullscreen', !!document.fullscreenElement);
+    // Fullscreen starts collapsed by default to reclaim screen space;
+    // leaving fullscreen always restores it so it's never stuck hidden.
+    if (document.fullscreenElement) document.body.classList.add('header-collapsed');
+    else document.body.classList.remove('header-collapsed');
+  });
+  $('header-collapse-btn').addEventListener('click', () => {
+    document.body.classList.toggle('header-collapsed');
   });
 
   function clientToCanvas(clientX, clientY) {
