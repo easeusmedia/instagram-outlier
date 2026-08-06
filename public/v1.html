@@ -1646,21 +1646,27 @@ function initEditor() {
   // zoom/canvas_x/canvas_y on every tick — that double-processing was the
   // actual cause of the choppy, drifting zoom (and, by extension, the
   // connections looking "distorted" as canvas_x/y fell out of sync).
+  let gesturePivot = null, gestureTimer = null;
   container.addEventListener('wheel', (e) => {
     e.preventDefault();
     e.stopImmediatePropagation();
     if (e.ctrlKey || e.metaKey) {
       const factor = Math.exp(-e.deltaY * 0.0035);
-      // A trackpad pinch doesn't move the OS cursor at all — it's a
-      // separate gesture layered on top of wherever the pointer already
-      // is — so the browser has to attach *some* clientX/clientY to the
-      // synthetic wheel event it generates, and that value can end up far
-      // from where the cursor is actually rendered on screen (confirmed
-      // directly on a real recording: the visible cursor never moved, yet
-      // the zoom kept anchoring somewhere else entirely). lastPointer is
-      // our own independent mousemove tracking, immune to that — same
-      // source the toolbar buttons already use for the identical reason.
-      setZoom(editor.zoom * factor, lastPointer?.x ?? e.clientX, lastPointer?.y ?? e.clientY);
+      // Lock the pivot for the *whole* pinch/scroll gesture instead of
+      // re-reading it on every single tick. A trackpad pinch doesn't move
+      // the OS cursor at all — it's a separate gesture layered on top of
+      // wherever the pointer already sits — so the browser has to attach
+      // *some* clientX/clientY to each synthetic wheel event it generates,
+      // and that can drift slightly tick-to-tick even though the cursor
+      // itself never visibly moves (confirmed directly on a real screen
+      // recording). Re-anchoring every tick lets that per-tick drift
+      // accumulate into a visible "walk" over one continuous gesture;
+      // capturing the pivot once, on the first tick, and reusing it until
+      // a >150ms gap says the gesture ended, removes that entirely.
+      clearTimeout(gestureTimer);
+      if (!gesturePivot) gesturePivot = { x: lastPointer?.x ?? e.clientX, y: lastPointer?.y ?? e.clientY };
+      gestureTimer = setTimeout(() => { gesturePivot = null; }, 150);
+      setZoom(editor.zoom * factor, gesturePivot.x, gesturePivot.y);
     } else {
       editor.canvas_x -= e.deltaX;
       editor.canvas_y -= e.deltaY;
