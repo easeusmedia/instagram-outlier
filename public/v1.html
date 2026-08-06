@@ -220,14 +220,15 @@
      flex:1 already reserves that same space whether it's visible or
      faded out below, so this keeps them put either way. */
   #settings-btn { margin-left: auto; }
-  /* Fullscreen: the whole bar — title, settings, panel toggle, all of it —
-     fades out together once the cursor leaves the header, no click, no
-     separate toggle button, and fades back in the instant it's hovered
-     again. .canvas-header itself keeps its full height/width the entire
-     time (only its children's opacity changes), so that reserved strip at
-     the very top is always there to hover back into. */
-  .is-fullscreen .canvas-header > * { opacity: 0; pointer-events: none; transition: opacity 0.15s ease; }
-  .is-fullscreen .canvas-header:hover > * { opacity: 1; pointer-events: auto; }
+  /* Fullscreen: the whole bar fades as one piece — its background/blur
+     included, not just the buttons sitting on top of it — once the cursor
+     leaves it, and back in together the instant it's hovered again. No
+     click, no separate toggle button. The element keeps its full
+     height/width and stays hoverable throughout (only its own opacity
+     changes), so that strip at the very top is always there to hover
+     back into even while invisible. */
+  .is-fullscreen .canvas-header { opacity: 0; transition: opacity 0.15s ease; }
+  .is-fullscreen .canvas-header:hover { opacity: 1; }
 
   .canvas-layout { flex: 1; display: flex; min-height: 0; position: relative; }
   /* The dot grid lives on this outer, never-transformed container (not on
