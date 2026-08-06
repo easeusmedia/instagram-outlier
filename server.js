@@ -670,7 +670,22 @@ app.get('/api/reel', async (req, res) => {
     const items = await callApify(REEL_ACTOR, { username: [postUrl], resultsLimit: 1 }, 5);
     const raw = items && items[0];
     if (!raw || !raw.shortCode) throw new Error('Could not load that reel.');
-    const reel = { ...normalizeReelItem(raw), handle: (raw.ownerUsername || '').toLowerCase() };
+    const handle = (raw.ownerUsername || '').toLowerCase();
+
+    // A single reel has no distribution to score itself against — pull in
+    // the rest of its creator's reels (cached, or a fresh scrape if this
+    // creator has never been tracked) so the outlier score on a pasted reel
+    // means the same thing it does everywhere else: relative to that
+    // creator's own other videos, not blank.
+    let reels = handle ? await getCreatorReels(handle) : null;
+    if (!reels && handle) {
+      const reelItems = await callApify(REEL_ACTOR, { username: [handle], resultsLimit: REELS_LIMIT }, REELS_LIMIT);
+      reels = scoreReels(reelItems || []);
+      await upsertReels(handle, reels);
+    }
+    const merged = reels ? mergeReels(reels, [raw]) : scoreReels([raw]);
+    if (handle) await upsertReels(handle, merged);
+    const reel = { ...merged.find((r) => r.shortCode === raw.shortCode), handle };
     const [withTranscript] = await attachCachedTranscripts([reel]);
     res.json({ reel: withTranscript });
   } catch (err) {
