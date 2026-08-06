@@ -15,10 +15,11 @@ const PROFILE_ACTOR = 'apify~instagram-profile-scraper';
 const TRANSCRIPT_ACTOR = 'apple_yang~instagram-transcripts-scraper';
 const APIFY_TOKEN_ENV = process.env.APIFY_TOKEN || '';
 const PORT = process.env.PORT || 3000;
-// How often a cache hit is allowed to trigger a background "is there
-// anything new?" check, per creator. Bounds API cost from repeat searches
-// while still catching new uploads without the user asking for &refresh=1.
-const FRESHNESS_CHECK_COOLDOWN_MS = 30 * 60 * 1000;
+// How often a cache hit is allowed to trigger a full background re-scrape,
+// per creator. Bounds API cost from repeat searches of the same profile
+// while still keeping view/like counts (which only change on a full
+// re-scrape, not a lighter check) from going stale indefinitely.
+const REFRESH_COOLDOWN_MS = 7 * 24 * 60 * 60 * 1000; // once a week
 // ------------------------------------------------------------------------
 
 // --- Google OAuth login gate -------------------------------------------
@@ -247,6 +248,7 @@ async function deleteCreatorCategory(id) {
   const rows = await queryAll('SELECT handle FROM bookmark_categories WHERE category_id = ?', [id]);
   await run('DELETE FROM bookmark_categories WHERE category_id = ?', [id]);
   await run('UPDATE bookmarks SET category_id = NULL WHERE category_id = ?', [id]);
+  await run('DELETE FROM creator_categories WHERE id = ?', [id]);
   await Promise.all(rows.map((r) => syncPrimaryCategoryColumn(r.handle)));
 }
 
@@ -470,34 +472,23 @@ function mergeReels(cachedNormalized, freshRawItems) {
   return computeOutlierScores(merged);
 }
 
-// Fired (not awaited) after a cache-hit response has already gone out, so it
-// never slows the request down. Does the cheapest possible Apify call — one
-// reel — to see if the creator has posted anything since we last cached
-// them; only pays for a full re-scrape when there's actually something new
-// to merge in. Skipped entirely if we checked this creator recently, to
-// bound API cost from repeat searches.
-async function checkForNewReelsInBackground(handle, cachedReels, limit) {
+// Fired (not awaited) after a cache-hit response has already gone out, so
+// it never slows the request down or makes a repeat search of the same
+// profile within the same week pay for anything extra. Re-scrapes the
+// creator's full reel batch and merges it into the cache — a full re-scrape
+// is what actually refreshes view/like counts on already-cached reels (a
+// single-newest-reel check, which is all the old version did, only ever
+// catches a brand new upload and never revisits older ones, which is why
+// view counts could go stale indefinitely). mergeReels keeps whichever
+// side has a transcript already, so nothing cached gets thrown away.
+async function refreshCreatorInBackground(handle, cachedReels, limit) {
   try {
-    if (Date.now() - (await getLastCheckedAt(handle)) < FRESHNESS_CHECK_COOLDOWN_MS) return;
+    if (Date.now() - (await getLastCheckedAt(handle)) < REFRESH_COOLDOWN_MS) return;
     await markChecked(handle);
-
-    // maxItems must clear Apify's minimum-run-cost floor for this actor
-    // (same reason resolveOwnerFromPost uses 5, not 1) — resultsLimit still
-    // caps what's actually scraped to just the newest reel.
-    const [latest] = (await callApify(REEL_ACTOR, { username: [handle], resultsLimit: 1 }, 5)) || [];
-    if (!latest) return;
-
-    const newest = cachedReels[0]; // reels are stored newest-first
-    const latestTime = latest.timestamp ? new Date(latest.timestamp).getTime() : 0;
-    const newestCachedTime = newest?.timestamp ? new Date(newest.timestamp).getTime() : 0;
-    if (!latest.shortCode || latest.shortCode === newest?.shortCode || latestTime <= newestCachedTime) {
-      return; // nothing new
-    }
-
     const reelItems = await callApify(REEL_ACTOR, { username: [handle], resultsLimit: limit }, limit);
     await upsertReels(handle, mergeReels(cachedReels, reelItems || []));
   } catch (err) {
-    console.error(`Background freshness check failed for ${handle}:`, err.message);
+    console.error(`Background refresh failed for ${handle}:`, err.message);
   }
 }
 
@@ -644,7 +635,7 @@ app.get('/api/creator', async (req, res) => {
     res.json({ profile, reels: withTranscripts, bookmarked: await isBookmarked(handle), hasMore: withTranscripts.length >= requestedLimit });
 
     if (!freshlyScraped && !forceRefresh) {
-      checkForNewReelsInBackground(handle, reels, requestedLimit);
+      refreshCreatorInBackground(handle, reels, requestedLimit);
     }
   } catch (err) {
     console.error(err);
