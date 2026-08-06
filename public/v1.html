@@ -1815,16 +1815,20 @@ function initEditor() {
       searchCreator();
       return;
     }
+    // Landing on the canvas, not the search panel — no need to borrow its
+    // "Search a Creator" status line for a busy message that has nothing
+    // to do with searching. The node itself appearing is the feedback;
+    // only a failure needs surfacing, and it still uses that line since
+    // there's nowhere better for it.
     const statusEl = $('search-status');
     statusEl.classList.remove('error');
-    statusEl.textContent = 'Looking up that reel…';
+    statusEl.textContent = ''; // clear any stale error from a previous paste
     try {
       const { reel } = await fetchJSON(`/api/reel?input=${encodeURIComponent(trimmed)}`);
       const centerX = (editor.container.clientWidth / 2) / editor.zoom - editor.canvas_x / editor.zoom;
       const centerY = (editor.container.clientHeight / 2) / editor.zoom - editor.canvas_y / editor.zoom;
       const id = editor.addNode(reel.shortCode, 0, 1, centerX, centerY, 'video-node', reel, buildVideoNodeHtml(reel));
       wireVideoNode(id);
-      statusEl.textContent = '';
     } catch (err) {
       statusEl.textContent = err.message;
       statusEl.classList.add('error');
