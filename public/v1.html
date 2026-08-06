@@ -226,9 +226,21 @@
      click, no separate toggle button. The element keeps its full
      height/width and stays hoverable throughout (only its own opacity
      changes), so that strip at the very top is always there to hover
-     back into even while invisible. */
-  .is-fullscreen .canvas-header { opacity: 0; transition: opacity 0.15s ease; }
-  .is-fullscreen .canvas-header:hover { opacity: 1; }
+     back into even while invisible.
+     opacity:0 alone isn't enough here — backdrop-filter's blur can still
+     visibly render against whatever's behind it even at zero opacity (a
+     real cross-browser compositing quirk, not just this app), which is
+     what showed up as a faint "cut" line across the top when supposedly
+     fully hidden. Explicitly zeroing backdrop-filter/background/border in
+     the hidden state guarantees there's nothing left to render at all. */
+  .is-fullscreen .canvas-header {
+    opacity: 0; background: transparent; backdrop-filter: none; -webkit-backdrop-filter: none;
+    border-bottom-color: transparent; transition: opacity 0.15s ease, background 0.15s ease, border-color 0.15s ease;
+  }
+  .is-fullscreen .canvas-header:hover {
+    opacity: 1; background: rgba(6,7,8,0.7); backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur);
+    border-bottom-color: var(--border);
+  }
 
   .canvas-layout { flex: 1; display: flex; min-height: 0; position: relative; }
   /* The dot grid lives on this outer, never-transformed container (not on
