@@ -720,11 +720,12 @@ function fmtNum(n) {
   if (n >= 1_000) return (n / 1_000).toFixed(1) + 'K';
   return String(n);
 }
-// outlierScore is now views ÷ the IQR upper fence (Q3 + 1.5×IQR) — score
-// >= 1 means the reel IS an outlier by that rule. Green = clearly past the
-// fence, yellow = right at/near it, red = within the normal range.
+// outlierScore is views ÷ the creator's own median views — 3x+ is the
+// standard "this is an outlier" threshold (green); 1.5x-3x is above their
+// normal but not a breakout (yellow); under that is within their normal
+// range (red).
 function scoreBadge(score) {
-  const cls = score == null ? '' : score >= 1.5 ? 'score-hot' : score >= 1 ? 'score-mid' : 'score-low';
+  const cls = score == null ? '' : score >= 3 ? 'score-hot' : score >= 1.5 ? 'score-mid' : 'score-low';
   return `<span class="score ${cls}">${score != null ? score.toFixed(1) + '×' : '—'}</span>`;
 }
 function imgFallback(el) {

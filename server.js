@@ -447,21 +447,23 @@ function normalizeReelItem(it) {
   };
 }
 
-// Outlier detection follows the standard IQR rule (see e.g. Khan Academy's
-// "Identifying outliers: IQR rule"): a value is an outlier once it clears
-// Q3 + 1.5*IQR. outlierScore expresses how far past that fence a reel's
-// views land — score >= 1 means it IS an outlier by the rule; the further
-// past 1, the more extreme. This replaces the older "views ÷ median"
-// ratio, which wasn't a real outlier test, just a distance-from-typical
-// measure.
+// outlierScore is views ÷ the creator's own median views (over whatever's
+// cached) — this is the convention actual reel-outlier tools use (e.g. the
+// "Outliers" Chrome extension, and creator-growth writeups defining an
+// outlier as a reel clearing 3x the account's median of its last 30):
+// simple, and it ranks the way creators actually talk about it ("this is a
+// 6x for me"), unlike the IQR-fence version this replaces — that scored
+// most of a creator's own best videos under 1.0 (since Q3+1.5*IQR sits
+// *above* typical good performance, not at it), so "most outlier video"
+// never surfaced as the top result the way a plain views-vs-normal ratio
+// does. Median over mean since one viral post shouldn't drag the baseline
+// that everything else, including itself, gets judged against.
 function computeOutlierScores(normalized) {
   const views = normalized.map((r) => r.views).filter((v) => v != null && v > 0).sort((a, b) => a - b);
-  const q1 = quantile(views, 0.25);
-  const q3 = quantile(views, 0.75);
-  const upperFence = q3 + 1.5 * (q3 - q1);
+  const median = quantile(views, 0.5);
   return normalized.map((r) => ({
     ...r,
-    outlierScore: upperFence > 0 && r.views != null ? Math.min(r.views / upperFence, OUTLIER_SCORE_CAP) : null,
+    outlierScore: median > 0 && r.views != null ? Math.min(r.views / median, OUTLIER_SCORE_CAP) : null,
   }));
 }
 

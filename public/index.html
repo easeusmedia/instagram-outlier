@@ -656,10 +656,10 @@
           <div class="dual-slider">
             <div class="dual-slider-track"></div>
             <div class="dual-slider-range" id="add-range-fill"></div>
-            <input type="range" id="add-score-min" min="0" max="10" step="0.5" />
-            <input type="range" id="add-score-max" min="0" max="10" step="0.5" />
+            <input type="range" id="add-score-min" min="0" max="50" step="1" />
+            <input type="range" id="add-score-max" min="0" max="50" step="1" />
             <div class="slider-pill" id="add-score-min-pill">0&times;</div>
-            <div class="slider-pill" id="add-score-max-pill">10&times;</div>
+            <div class="slider-pill" id="add-score-max-pill">50&times;</div>
           </div>
         </div>
         <div class="field">
@@ -714,10 +714,10 @@
         <div class="dual-slider">
           <div class="dual-slider-track"></div>
           <div class="dual-slider-range" id="videos-range-fill"></div>
-          <input type="range" id="videos-score-min" min="0" max="10" step="0.5" />
-          <input type="range" id="videos-score-max" min="0" max="10" step="0.5" />
+          <input type="range" id="videos-score-min" min="0" max="50" step="1" />
+          <input type="range" id="videos-score-max" min="0" max="50" step="1" />
           <div class="slider-pill" id="videos-score-min-pill">0&times;</div>
-          <div class="slider-pill" id="videos-score-max-pill">10&times;</div>
+          <div class="slider-pill" id="videos-score-max-pill">50&times;</div>
         </div>
       </div>
       <div class="field">
@@ -864,10 +864,10 @@ const state = {
   scripts: [],              // dragged/generated transcripts for the Script Generator
 };
 
-// outlierScore is views ÷ the IQR upper fence (Q3 + 1.5×IQR) — a score of
-// 1 is exactly the fence, i.e. the point the IQR rule calls an outlier.
-const HOT_THRESHOLD = 1.5;  // outlier score at/above this renders the orange "hot" badge
-const WARM_THRESHOLD = 1;   // outlier score at/above this renders the blue "warm" badge (right at/near the IQR fence)
+// outlierScore is views ÷ the creator's own median views — 3x+ is the
+// standard "this is an outlier" threshold used by reel-outlier tools.
+const HOT_THRESHOLD = 3;    // outlier score at/above this renders the orange "hot" badge
+const WARM_THRESHOLD = 1.5; // outlier score at/above this renders the blue "warm" badge (above normal, not yet a breakout)
 
 const CATEGORY_COLORS = ['#00AAFF', '#8b5cf6', '#10b981', '#f59e0b', '#ec4899', '#0ea5e9', '#f97316'];
 const categoryColor = (id) => CATEGORY_COLORS[id % CATEGORY_COLORS.length];
@@ -952,7 +952,7 @@ function escapeHtml(str) {
   return div.innerHTML;
 }
 
-const SCORE_SLIDER_MAX = 10; // outlierScore is now views ÷ the IQR upper fence, so real scores rarely exceed single digits
+const SCORE_SLIDER_MAX = 50; // outlierScore is views ÷ median — genuine breakouts commonly land in the 10-50x range
 
 function filterAndSort(reels, { sortBy, lengthFilter, dateFilter, scoreMin, scoreMax }) {
   let items = [...reels];
