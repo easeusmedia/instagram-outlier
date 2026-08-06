@@ -207,17 +207,13 @@
   }
   .canvas-header h2 { font-size: 14.5px; font-weight: 500; color: var(--text); }
   .canvas-header .save-status { color: var(--text-faint); font-size: 11.5px; margin-left: auto; margin-right: 4px; }
-  /* Fullscreen: the header slides fully out of view (taken out of flex flow
-     so the canvas grows to fill the space) and only reappears while the
-     mouse is up near the very top edge, or over the header itself once
-     it's peeking down. */
-  .is-fullscreen .canvas-header {
-    position: fixed; left: 0; right: 0; z-index: 40;
-    top: -90px; transition: top .2s ease;
-  }
-  .is-fullscreen .canvas-header.header-visible { top: 0; }
-  .fullscreen-hover-strip { display: none; }
-  .is-fullscreen .fullscreen-hover-strip { display: block; position: fixed; top: 0; left: 0; right: 0; height: 10px; z-index: 39; }
+  /* Fullscreen: the whole header (title, back, rename, settings) just
+     disappears outright — no hover-to-reveal. Reappears automatically on
+     exiting fullscreen since this is the only thing gating it. */
+  .is-fullscreen .canvas-header { display: none; }
+  /* Lives outside .canvas-header so it's still reachable in fullscreen —
+     fixed in both modes, so it doesn't visibly jump when toggling. */
+  #panel-toggle-btn { position: fixed; top: 14px; right: 22px; z-index: 45; }
 
   .canvas-layout { flex: 1; display: flex; min-height: 0; position: relative; }
   /* The dot grid lives on this outer, never-transformed container (not on
@@ -474,15 +470,16 @@
 </div>
 
 <div id="canvas-view" style="display:none">
-  <div class="fullscreen-hover-strip" id="fullscreen-hover-strip"></div>
   <div class="canvas-header" id="canvas-header">
     <button class="icon-btn" id="back-btn" title="Back to spaces"></button>
     <h2 id="space-name"></h2>
     <button class="icon-btn tiny" id="rename-space-btn" title="Rename space"></button>
     <div class="save-status" id="save-status"></div>
     <button class="icon-btn" id="settings-btn" title="Settings"></button>
-    <button class="icon-btn" id="panel-toggle-btn" title="Toggle creator panel"></button>
   </div>
+  <!-- Lives outside .canvas-header (fixed, always at top-right) so it stays
+       reachable even in fullscreen, when the rest of the header is hidden. -->
+  <button class="icon-btn" id="panel-toggle-btn" title="Toggle creator panel"></button>
   <div class="canvas-layout">
     <div id="drawflow">
       <div class="connection-delete-btn" id="connection-delete-btn" title="Remove connection"></div>
@@ -693,9 +690,11 @@ function fmtNum(n) {
   if (n >= 1_000) return (n / 1_000).toFixed(1) + 'K';
   return String(n);
 }
-// Outlier score at a glance: green = strong, yellow = average, red = weak.
+// outlierScore is now views ÷ the IQR upper fence (Q3 + 1.5×IQR) — score
+// >= 1 means the reel IS an outlier by that rule. Green = clearly past the
+// fence, yellow = right at/near it, red = within the normal range.
 function scoreBadge(score) {
-  const cls = score == null ? '' : score >= 10 ? 'score-hot' : score >= 3 ? 'score-mid' : 'score-low';
+  const cls = score == null ? '' : score >= 1.5 ? 'score-hot' : score >= 1 ? 'score-mid' : 'score-low';
   return `<span class="score ${cls}">${score != null ? score.toFixed(1) + '×' : '—'}</span>`;
 }
 function imgFallback(el) {
@@ -1693,13 +1692,7 @@ function initEditor() {
   document.addEventListener('fullscreenchange', () => {
     $('fullscreen-btn').innerHTML = icon(document.fullscreenElement ? 'shrink' : 'expand', { size: 14 });
     document.body.classList.toggle('is-fullscreen', !!document.fullscreenElement);
-    $('canvas-header').classList.remove('header-visible');
   });
-  const showHeader = () => $('canvas-header').classList.add('header-visible');
-  const hideHeader = () => $('canvas-header').classList.remove('header-visible');
-  $('fullscreen-hover-strip').addEventListener('mouseenter', showHeader);
-  $('canvas-header').addEventListener('mouseenter', showHeader);
-  $('canvas-header').addEventListener('mouseleave', hideHeader);
 
   function clientToCanvas(clientX, clientY) {
     const rect = container.getBoundingClientRect();
@@ -1727,11 +1720,11 @@ function initEditor() {
     }
   });
 
-  // Paste an Instagram link straight onto the canvas: a reel/post link gets
-  // looked up and dropped in as a video-node; a profile link or bare
-  // @handle runs through the normal search flow instead (server-side
-  // parseInput already understands both shapes — this just decides which
-  // client-side action to take with the result).
+  // Paste an Instagram link: a reel/post link always lands on the canvas
+  // (left) as a video-node — /api/reel resolves that exact post directly,
+  // no need to search an owner's recent batch and risk not finding it. A
+  // profile link or bare @handle always goes to the search panel (right)
+  // instead, never onto the canvas.
   document.addEventListener('paste', async (e) => {
     const tag = document.activeElement?.tagName;
     if (tag === 'INPUT' || tag === 'TEXTAREA') return; // let normal paste happen in text fields
@@ -1753,22 +1746,12 @@ function initEditor() {
     statusEl.classList.remove('error');
     statusEl.textContent = 'Looking up that reel…';
     try {
-      const data = await fetchJSON(`/api/creator?input=${encodeURIComponent(trimmed)}&limit=30`);
-      const match = data.reels.find((r) => trimmed.includes(r.shortCode));
-      if (match) {
-        const centerX = (editor.container.clientWidth / 2) / editor.zoom - editor.canvas_x / editor.zoom;
-        const centerY = (editor.container.clientHeight / 2) / editor.zoom - editor.canvas_y / editor.zoom;
-        const payload = { ...match, handle: data.profile.handle };
-        const id = editor.addNode(match.shortCode, 0, 1, centerX, centerY, 'video-node', payload, buildVideoNodeHtml(payload));
-        wireVideoNode(id);
-        statusEl.textContent = '';
-      } else {
-        state.currentHandle = data.profile.handle;
-        state.pool.clear();
-        addToPool(data.reels, data.profile.handle);
-        renderCreatorHeader(data);
-        statusEl.textContent = `Couldn't find that exact reel in @${data.profile.handle}'s recent uploads — showing their profile instead.`;
-      }
+      const { reel } = await fetchJSON(`/api/reel?input=${encodeURIComponent(trimmed)}`);
+      const centerX = (editor.container.clientWidth / 2) / editor.zoom - editor.canvas_x / editor.zoom;
+      const centerY = (editor.container.clientHeight / 2) / editor.zoom - editor.canvas_y / editor.zoom;
+      const id = editor.addNode(reel.shortCode, 0, 1, centerX, centerY, 'video-node', reel, buildVideoNodeHtml(reel));
+      wireVideoNode(id);
+      statusEl.textContent = '';
     } catch (err) {
       statusEl.textContent = err.message;
       statusEl.classList.add('error');

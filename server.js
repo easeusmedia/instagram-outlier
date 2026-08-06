@@ -411,11 +411,14 @@ function numOrNull(v) {
   return typeof v === 'number' && !Number.isNaN(v) ? v : null;
 }
 
-function median(nums) {
-  if (!nums.length) return 0;
-  const sorted = [...nums].sort((a, b) => a - b);
-  const mid = Math.floor(sorted.length / 2);
-  return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+// Linear-interpolation quantile (matches numpy's default / Excel's
+// PERCENTILE.INC) — `sorted` must already be ascending.
+function quantile(sorted, q) {
+  if (!sorted.length) return 0;
+  const pos = (sorted.length - 1) * q;
+  const base = Math.floor(pos);
+  const rest = pos - base;
+  return sorted[base + 1] !== undefined ? sorted[base] + rest * (sorted[base + 1] - sorted[base]) : sorted[base];
 }
 
 // Instagram (via the scraper) reports two different metrics: videoViewCount
@@ -444,12 +447,21 @@ function normalizeReelItem(it) {
   };
 }
 
+// Outlier detection follows the standard IQR rule (see e.g. Khan Academy's
+// "Identifying outliers: IQR rule"): a value is an outlier once it clears
+// Q3 + 1.5*IQR. outlierScore expresses how far past that fence a reel's
+// views land — score >= 1 means it IS an outlier by the rule; the further
+// past 1, the more extreme. This replaces the older "views ÷ median"
+// ratio, which wasn't a real outlier test, just a distance-from-typical
+// measure.
 function computeOutlierScores(normalized) {
-  const views = normalized.map((r) => r.views).filter((v) => v != null && v > 0);
-  const med = median(views);
+  const views = normalized.map((r) => r.views).filter((v) => v != null && v > 0).sort((a, b) => a - b);
+  const q1 = quantile(views, 0.25);
+  const q3 = quantile(views, 0.75);
+  const upperFence = q3 + 1.5 * (q3 - q1);
   return normalized.map((r) => ({
     ...r,
-    outlierScore: med > 0 && r.views != null ? Math.min(r.views / med, OUTLIER_SCORE_CAP) : null,
+    outlierScore: upperFence > 0 && r.views != null ? Math.min(r.views / upperFence, OUTLIER_SCORE_CAP) : null,
   }));
 }
 
@@ -637,6 +649,30 @@ app.get('/api/creator', async (req, res) => {
     if (!freshlyScraped && !forceRefresh) {
       refreshCreatorInBackground(handle, reels, requestedLimit);
     }
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: err.message || 'Something went wrong.' });
+  }
+});
+
+// Resolves one specific reel/post link directly — the same Apify call
+// resolveOwnerFromPost makes already returns full data for that exact post
+// (not just its owner), so this just keeps the rest instead of throwing it
+// away. Used by v1's "paste a reel link onto the canvas" so it never has
+// to search an owner's recent batch (and fail) to find the pasted reel.
+app.get('/api/reel', async (req, res) => {
+  try {
+    const parsed = parseInput(req.query.input);
+    if (!parsed || parsed.type !== 'post') {
+      return res.status(400).json({ error: 'Paste a specific reel or post link (not a username).' });
+    }
+    const postUrl = `https://www.instagram.com/${parsed.kind}/${parsed.code}/`;
+    const items = await callApify(REEL_ACTOR, { username: [postUrl], resultsLimit: 1 }, 5);
+    const raw = items && items[0];
+    if (!raw || !raw.shortCode) throw new Error('Could not load that reel.');
+    const reel = { ...normalizeReelItem(raw), handle: (raw.ownerUsername || '').toLowerCase() };
+    const [withTranscript] = await attachCachedTranscripts([reel]);
+    res.json({ reel: withTranscript });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: err.message || 'Something went wrong.' });
@@ -982,6 +1018,20 @@ app.get('/api/image-proxy', async (req, res) => {
     res.status(502).end();
   }
 });
+
+// One-time-per-boot migration: outlierScore's formula changed from
+// "views ÷ median" to the IQR-rule version above. Recomputes it for every
+// already-cached creator so scores don't sit inconsistent between old and
+// freshly-scraped data for up to a week (the normal refresh cadence) — pure
+// local recomputation from already-cached views, no Apify calls. Cheap
+// enough to just always run rather than track whether it's needed.
+async function migrateOutlierScores() {
+  const rows = await queryAll('SELECT handle, data FROM reels');
+  for (const row of rows) {
+    await upsertReels(row.handle, computeOutlierScores(JSON.parse(row.data)));
+  }
+}
+await migrateOutlierScores();
 
 app.listen(PORT, () => {
   console.log(`Instagram Outlier running at http://localhost:${PORT}`);

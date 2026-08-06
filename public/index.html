@@ -656,10 +656,10 @@
           <div class="dual-slider">
             <div class="dual-slider-track"></div>
             <div class="dual-slider-range" id="add-range-fill"></div>
-            <input type="range" id="add-score-min" min="0" max="100" step="1" />
-            <input type="range" id="add-score-max" min="0" max="100" step="1" />
+            <input type="range" id="add-score-min" min="0" max="10" step="0.5" />
+            <input type="range" id="add-score-max" min="0" max="10" step="0.5" />
             <div class="slider-pill" id="add-score-min-pill">0&times;</div>
-            <div class="slider-pill" id="add-score-max-pill">100&times;</div>
+            <div class="slider-pill" id="add-score-max-pill">10&times;</div>
           </div>
         </div>
         <div class="field">
@@ -714,10 +714,10 @@
         <div class="dual-slider">
           <div class="dual-slider-track"></div>
           <div class="dual-slider-range" id="videos-range-fill"></div>
-          <input type="range" id="videos-score-min" min="0" max="100" step="1" />
-          <input type="range" id="videos-score-max" min="0" max="100" step="1" />
+          <input type="range" id="videos-score-min" min="0" max="10" step="0.5" />
+          <input type="range" id="videos-score-max" min="0" max="10" step="0.5" />
           <div class="slider-pill" id="videos-score-min-pill">0&times;</div>
-          <div class="slider-pill" id="videos-score-max-pill">100&times;</div>
+          <div class="slider-pill" id="videos-score-max-pill">10&times;</div>
         </div>
       </div>
       <div class="field">
@@ -864,8 +864,10 @@ const state = {
   scripts: [],              // dragged/generated transcripts for the Script Generator
 };
 
-const HOT_THRESHOLD = 10;  // outlier score at/above this renders the orange "hot" badge
-const WARM_THRESHOLD = 3;  // outlier score at/above this renders the blue "warm" badge
+// outlierScore is views ÷ the IQR upper fence (Q3 + 1.5×IQR) — a score of
+// 1 is exactly the fence, i.e. the point the IQR rule calls an outlier.
+const HOT_THRESHOLD = 1.5;  // outlier score at/above this renders the orange "hot" badge
+const WARM_THRESHOLD = 1;   // outlier score at/above this renders the blue "warm" badge (right at/near the IQR fence)
 
 const CATEGORY_COLORS = ['#00AAFF', '#8b5cf6', '#10b981', '#f59e0b', '#ec4899', '#0ea5e9', '#f97316'];
 const categoryColor = (id) => CATEGORY_COLORS[id % CATEGORY_COLORS.length];
@@ -950,7 +952,7 @@ function escapeHtml(str) {
   return div.innerHTML;
 }
 
-const SCORE_SLIDER_MAX = 100;
+const SCORE_SLIDER_MAX = 10; // outlierScore is now views ÷ the IQR upper fence, so real scores rarely exceed single digits
 
 function filterAndSort(reels, { sortBy, lengthFilter, dateFilter, scoreMin, scoreMax }) {
   let items = [...reels];
@@ -1043,8 +1045,8 @@ document.addEventListener('click', (e) => {
 function scorePct(v) { return (v / SCORE_SLIDER_MAX) * 100; }
 
 function syncScoreSlider(p) {
-  const min = parseInt($(`${p}-score-min`).value, 10);
-  const max = parseInt($(`${p}-score-max`).value, 10);
+  const min = parseFloat($(`${p}-score-min`).value);
+  const max = parseFloat($(`${p}-score-max`).value);
   $(`${p}-score-min-pill`).textContent = min + '×';
   $(`${p}-score-max-pill`).textContent = (max >= SCORE_SLIDER_MAX ? max + '+' : max) + '×';
   $(`${p}-score-min-pill`).style.left = scorePct(min) + '%';
@@ -1054,7 +1056,7 @@ function syncScoreSlider(p) {
 }
 
 function getScoreRange(p) {
-  return { scoreMin: parseInt($(`${p}-score-min`).value, 10), scoreMax: parseInt($(`${p}-score-max`).value, 10) };
+  return { scoreMin: parseFloat($(`${p}-score-min`).value), scoreMax: parseFloat($(`${p}-score-max`).value) };
 }
 
 ['add', 'videos'].forEach((p) => {
