@@ -133,8 +133,17 @@
     white-space: pre-wrap; background: rgba(255,255,255,0.035); border: 1px solid var(--border);
     border-radius: var(--radius-sm); padding: 12px; margin-bottom: 4px;
   }
-  .manage-cat-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 10px; border: 1px solid var(--border); border-radius: var(--radius-sm); margin-bottom: 6px; font-size: 12.5px; color: var(--text-dim); }
-  .manage-cat-row .remove-creator-btn { width: 24px; height: 24px; flex-shrink: 0; }
+  .manage-matrix-wrap { overflow: auto; border: 1px solid var(--border); border-radius: var(--radius-sm); max-height: 46vh; }
+  .manage-matrix { border-collapse: collapse; width: 100%; font-size: 12px; }
+  .manage-matrix th, .manage-matrix td { padding: 8px 10px; text-align: center; border-bottom: 1px solid var(--border); white-space: nowrap; }
+  .manage-matrix th { color: var(--text-faint); font-weight: 500; text-transform: uppercase; font-size: 10px; letter-spacing: .05em; position: sticky; top: 0; background: rgba(14,16,20,0.98); }
+  .manage-matrix td:first-child, .manage-matrix th:first-child { text-align: left; color: var(--text-dim); position: sticky; left: 0; background: rgba(14,16,20,0.98); }
+  .manage-matrix .cat-th-row { display: flex; align-items: center; justify-content: center; gap: 4px; }
+  .manage-matrix .cat-th-row input { width: 70px; background: transparent; border: none; color: var(--text-faint); font-size: 10px; text-transform: uppercase; letter-spacing: .05em; text-align: center; padding: 2px; }
+  .manage-matrix .cat-th-row input:focus { outline: none; border-bottom: 1px solid var(--accent-border); }
+  .manage-matrix .cat-del-btn, .manage-matrix .untrack-btn { width: 20px; height: 20px; flex-shrink: 0; }
+  .manage-new-cat-row { display: flex; gap: 8px; margin-bottom: 14px; }
+  .manage-new-cat-row input { flex: 1; }
 
   /* --- dropdown menu ----------------------------------------------- */
   .dropdown-menu {
@@ -221,8 +230,14 @@
   }
   .drawflow .drawflow-node:hover { cursor: grab; }
   .drawflow .drawflow-node .drawflow_content_node { width: 100%; }
+  /* Muted white/gray at rest — blue is reserved for the brief flash right
+     when a connection is made (see .just-connected), not a permanent color. */
   .drawflow .drawflow-node .input, .drawflow .drawflow-node .output {
-    background: var(--accent); border: 2px solid rgba(6,7,8,0.95); width: 13px; height: 13px;
+    background: rgba(255,255,255,0.35); border: 2px solid rgba(6,7,8,0.95); width: 13px; height: 13px;
+    transition: background .7s ease, box-shadow .7s ease;
+  }
+  .drawflow .drawflow-node .input.just-connected, .drawflow .drawflow-node .output.just-connected {
+    background: var(--accent); box-shadow: 0 0 12px 3px var(--accent-soft); transition: none;
   }
   .drawflow .drawflow-node .input { left: -7px; }
   .drawflow .drawflow-node .output { right: -7px; }
@@ -258,7 +273,7 @@
   .node-card:hover .node-remove { opacity: 1; }
   .node-remove:hover { border-color: var(--danger); color: var(--danger); }
 
-  .reel-frame { position: relative; width: 100%; aspect-ratio: 9 / 16; border-radius: var(--radius-md) var(--radius-md) 0 0; overflow: hidden; background: rgba(255,255,255,0.03); }
+  .reel-frame { position: relative; width: 100%; aspect-ratio: 4 / 5; border-radius: var(--radius-md) var(--radius-md) 0 0; overflow: hidden; background: rgba(255,255,255,0.03); }
   .reel-frame img, .reel-frame video, .reel-frame iframe { width: 100%; height: 100%; object-fit: cover; display: block; border: none; }
   .reel-frame .play-btn {
     position: absolute; inset: 0; margin: auto; width: 38px; height: 38px; border-radius: 50%;
@@ -274,8 +289,11 @@
   .reel-frame .score.score-hot { color: #4CFF9E; text-shadow: 0 0 10px rgba(76,255,158,0.45); }
   .reel-frame .score.score-mid { color: #F3FF4C; text-shadow: 0 0 10px rgba(243,255,76,0.4); }
   .reel-frame .score.score-low { color: #FF4C6A; text-shadow: 0 0 10px rgba(255,76,106,0.4); }
+  /* Bottom-right, not top-right — the top-right corner is where the
+     node-remove × floats (just outside the frame), and the two were
+     overlapping on a standalone video-node when both showed on hover. */
   .reel-frame .menu-btn {
-    position: absolute; top: 7px; right: 7px; z-index: 2; width: 22px; height: 22px; border-radius: 7px;
+    position: absolute; bottom: 7px; right: 7px; z-index: 2; width: 22px; height: 22px; border-radius: 7px;
     background: rgba(8,9,11,0.62); border: 1px solid rgba(255,255,255,0.08); backdrop-filter: blur(8px);
     color: var(--text-dim);
   }
@@ -362,11 +380,13 @@
   .panel-row .label { font-size: 11px; color: var(--text-dim); font-weight: 500; }
 
   .section-title { font-size: 10.5px; text-transform: uppercase; letter-spacing: .07em; color: var(--text-faint); font-weight: 500; margin-bottom: 10px; }
+  .section-title-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+  .section-title-row .section-title { margin-bottom: 0; }
+  .section-title-row .manage-all-btn { padding: 5px 11px; font-size: 11px; }
   .tracked-cat { border: 1px solid var(--border); border-radius: var(--radius-sm); margin-bottom: 8px; overflow: hidden; }
   .tracked-cat-head { display: flex; align-items: center; gap: 8px; padding: 10px 12px; cursor: pointer; font-size: 12.5px; font-weight: 500; color: var(--text-dim); }
   .tracked-cat-head .chev { transition: transform .15s; color: var(--text-faint); }
   .tracked-cat-head span { flex: 1; }
-  .tracked-cat-head .cat-manage-btn { width: 22px; height: 22px; flex-shrink: 0; }
   .tracked-cat.open .chev { transform: rotate(90deg); }
   .tracked-cat-body { display: none; padding: 2px 12px 10px; }
   .tracked-cat.open .tracked-cat-body { display: block; }
@@ -439,6 +459,8 @@
         <button class="icon-btn tiny" id="recenter-btn" title="Recenter on your work"></button>
         <div class="sep"></div>
         <button class="icon-btn tiny" id="add-chat-btn" title="Add another AI Assistant"></button>
+        <div class="sep"></div>
+        <button class="icon-btn tiny" id="fullscreen-btn" title="Toggle fullscreen"></button>
       </div>
     </div>
     <aside class="search-panel" id="search-panel">
@@ -448,7 +470,10 @@
           <label class="switch"><input type="checkbox" id="show-all-toggle" checked /><span class="track"></span></label>
         </div>
         <div class="tracked-section">
-          <div class="section-title">Tracked Categories</div>
+          <div class="section-title-row">
+            <div class="section-title">Tracked Categories</div>
+            <button class="secondary manage-all-btn" id="manage-all-btn">Manage</button>
+          </div>
           <div id="tracked-cats"></div>
         </div>
         <div class="search-section">
@@ -519,14 +544,16 @@
 </div>
 
 <div class="modal-overlay" id="manage-cat-modal">
-  <div class="modal" style="width:420px">
-    <h3>Manage category</h3>
-    <div class="field"><input type="text" id="manage-cat-name-input" placeholder="Category name" /></div>
-    <div class="category-pick-list" id="manage-cat-creators" style="max-height:240px"></div>
+  <div class="modal" style="width:640px; max-width:calc(100vw - 40px)">
+    <h3>Manage tracked creators</h3>
+    <p class="modal-desc">Check every category a creator belongs to — a creator can be in more than one. Rename or delete a category from its column header.</p>
+    <div class="manage-new-cat-row">
+      <input type="text" id="manage-new-cat-input" placeholder="New category name" />
+      <button class="secondary" id="manage-new-cat-btn">Add category</button>
+    </div>
+    <div class="manage-matrix-wrap"><table class="manage-matrix" id="manage-matrix"></table></div>
     <div class="modal-actions">
-      <button class="secondary" id="manage-cat-cancel">Cancel</button>
-      <button class="secondary" id="manage-cat-delete" style="color:var(--danger)">Delete category</button>
-      <button class="primary" id="manage-cat-save">Save name</button>
+      <button class="primary" id="manage-cat-close">Done</button>
     </div>
   </div>
 </div>
@@ -548,7 +575,10 @@ const ICONS = {
   organize: '<rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/>',
   target: '<circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="2" fill="currentColor" stroke="none"/>',
   chev: '<polyline points="9 18 15 12 9 6"/>',
+  expand: '<polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/>',
+  shrink: '<polyline points="4 14 10 14 10 20"/><polyline points="20 10 14 10 14 4"/><line x1="14" y1="10" x2="21" y2="3"/><line x1="10" y1="14" x2="3" y2="21"/>',
   play: '<polygon points="6 3 20 12 6 21 6 3" fill="currentColor" stroke="none"/>',
+  pause: '<rect x="6" y="4" width="4" height="16" fill="currentColor" stroke="none"/><rect x="14" y="4" width="4" height="16" fill="currentColor" stroke="none"/>',
 };
 function icon(name, { size = 16 } = {}) {
   return `<svg class="icon" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">${ICONS[name]}</svg>`;
@@ -561,6 +591,7 @@ $('zoom-out-btn').innerHTML = icon('zoomOut', { size: 14 });
 $('organize-btn').innerHTML = icon('organize', { size: 13 });
 $('recenter-btn').innerHTML = icon('target', { size: 14 });
 $('add-chat-btn').innerHTML = icon('sparkle', { size: 13 }) + icon('plus', { size: 9 });
+$('fullscreen-btn').innerHTML = icon('expand', { size: 14 });
 $('connection-delete-btn').innerHTML = icon('close', { size: 11 });
 
 async function fetchJSON(url, opts = {}) {
@@ -830,12 +861,39 @@ function buildReelFrame(v) {
 // reel-frame. `getData`/`setTranscript` let the same wiring serve both a
 // standalone video-node (data lives on the node) and a mini inside a group
 // (data lives at `node.data.videos[idx]`).
+//
+// The play button is a real toggle: first click mounts a <video> in place
+// of the thumbnail and plays it; clicking the same button again pauses it
+// (and resumes on a third click) — it no longer just fires once and hands
+// control off to the video's own native controls.
 function wireReelFrame(el, { getData, ensureTranscript }) {
-  const playBtn = el.querySelector('.play-btn');
+  const frame = el.querySelector('.reel-frame');
+  const thumb = frame.querySelector('.thumb');
+  const playBtn = frame.querySelector('.play-btn');
+  let video = null;
   preventNodeDrag(playBtn);
   playBtn.addEventListener('click', (e) => {
     e.stopPropagation();
-    playInline(el.querySelector('.reel-frame'), getData());
+    const data = getData();
+    if (!video) {
+      if (!data.videoUrl) { playInline(frame, data); return; } // no direct URL — fall back to the one-shot embed
+      video = document.createElement('video');
+      video.src = data.videoUrl;
+      video.playsInline = true;
+      video.draggable = false;
+      video.setAttribute('referrerpolicy', 'no-referrer');
+      video.addEventListener('play', () => { playBtn.innerHTML = icon('pause', { size: 15 }); });
+      video.addEventListener('pause', () => { playBtn.innerHTML = icon('play', { size: 15 }); });
+      video.addEventListener('ended', () => { playBtn.innerHTML = icon('play', { size: 15 }); });
+      video.onerror = () => { video.remove(); video = null; thumb.style.display = ''; playInline(frame, data); };
+      thumb.style.display = 'none';
+      frame.insertBefore(video, playBtn);
+      video.play().catch(() => {});
+    } else if (video.paused) {
+      video.play().catch(() => {});
+    } else {
+      video.pause();
+    }
   });
   const menuBtn = el.querySelector('.menu-btn');
   preventNodeDrag(menuBtn);
@@ -984,6 +1042,7 @@ function buildChatNodeHtml(data = {}) {
   const hasOutput = !!data.output;
   return `
     <div class="chat-node node-card">
+      <button class="icon-btn tiny node-remove" title="Remove">${icon('close', { size: 11 })}</button>
       <div class="head">${icon('sparkle', { size: 15 })} AI Assistant</div>
       <div class="body">
         <div class="attached" style="display:none"></div>
@@ -1112,6 +1171,7 @@ function wireChatNode(nodeId) {
   const el = document.getElementById(`node-${nodeId}`);
   if (!el || el.dataset.wired) return;
   el.dataset.wired = '1';
+  wireRemove(nodeId, el);
   const promptEl = el.querySelector('.chat-prompt');
   const statusEl = el.querySelector('.chat-status');
   const outputEl = el.querySelector('.chat-output');
@@ -1182,6 +1242,21 @@ function refreshAllChatAttachments() {
   findNodesByClass('chat-node').forEach((id) => refreshChatAttachments(id));
 }
 
+// A connection's two endpoint dots blink blue once, right when the
+// connection is made, then settle back to muted white via the CSS
+// transition on .input/.output — blue is a "just happened" signal, not a
+// permanent color.
+function flashConnectionDots({ output_id, input_id, output_class, input_class }) {
+  [
+    document.querySelector(`#node-${output_id} .${output_class}`),
+    document.querySelector(`#node-${input_id} .${input_class}`),
+  ].forEach((dot) => {
+    if (!dot) return;
+    dot.classList.add('just-connected');
+    setTimeout(() => dot.classList.remove('just-connected'), 900);
+  });
+}
+
 // Drawflow persists each node's *rendered* HTML string at save time, not
 // just its data — so a space saved before a template/CSS change reopens
 // with stale markup that our current styles don't target. Rebuilding every
@@ -1235,6 +1310,7 @@ let saveTimer = null;
 function saveCanvasState() {
   clearTimeout(saveTimer);
   saveTimer = setTimeout(async () => {
+    captureUndoCheckpoint();
     try {
       await fetchJSON(`/api/spaces/${state.spaceId}`, { method: 'PUT', body: { canvasState: state.editor.export() } });
       $('save-status').textContent = '';
@@ -1242,6 +1318,48 @@ function saveCanvasState() {
       $('save-status').textContent = 'Save failed';
     }
   }, 500);
+}
+
+// --- undo / redo -------------------------------------------------------
+// A plain linear stack, not a branching history — Ctrl+Z always steps back
+// to the state right before the last settled batch of changes, Ctrl+Shift+Z
+// (or Ctrl+Y) steps forward again. Piggybacks on the same 500ms settle
+// window as autosave: every batch of rapid edits (a drag, a burst of
+// clicks) collapses into one undo step instead of one per event.
+let undoStack = [], redoStack = [];
+let lastSnapshot = null;
+const UNDO_LIMIT = 50;
+
+function captureUndoCheckpoint() {
+  const current = JSON.stringify(state.editor.export());
+  if (lastSnapshot !== null && lastSnapshot !== current) {
+    undoStack.push(lastSnapshot);
+    if (undoStack.length > UNDO_LIMIT) undoStack.shift();
+    redoStack = []; // a fresh change invalidates whatever redo history existed
+  }
+  lastSnapshot = current;
+}
+
+async function persistCanvasImmediately() {
+  clearTimeout(saveTimer);
+  try { await fetchJSON(`/api/spaces/${state.spaceId}`, { method: 'PUT', body: { canvasState: state.editor.export() } }); $('save-status').textContent = ''; }
+  catch { $('save-status').textContent = 'Save failed'; }
+}
+function restoreSnapshot(json) {
+  state.editor.import(JSON.parse(json));
+  refreshAndWireAllNodes();
+  lastSnapshot = json;
+  persistCanvasImmediately();
+}
+function undoCanvas() {
+  if (!undoStack.length) return;
+  redoStack.push(JSON.stringify(state.editor.export()));
+  restoreSnapshot(undoStack.pop());
+}
+function redoCanvas() {
+  if (!redoStack.length) return;
+  undoStack.push(JSON.stringify(state.editor.export()));
+  restoreSnapshot(redoStack.pop());
 }
 
 // --- zoom / pan --------------------------------------------------------
@@ -1271,64 +1389,81 @@ function setZoom(newZoom, pivotX, pivotY) {
   editor.zoom = newZoom;
   applyTransform();
 }
-// Arranges every node into a tidy grid (chat node pinned first) so a messy
-// canvas can be tidied with one click.
+// Layered (Sugiyama-style) graph layout: every node's column is its
+// longest-path distance from a source (a node with no incoming
+// connection), so data flows strictly left-to-right — video/group/script
+// nodes in column 0, the AI Assistant they feed in column 1, a second
+// chained AI Assistant in column 2, and so on. Columns never overlap
+// (each is exactly as wide as its widest node, spaced by a fixed gap) and
+// nodes within a column stack with even spacing, centered against the
+// tallest column — matching a standard node-editor auto-layout instead of
+// a naive grid pack that had no notion of *why* nodes were near each other.
 function organizeNodes() {
   const editor = state.editor;
   const data = editor.drawflow.drawflow.Home.data;
-  const gap = 56;
+  const gap = 64, colGap = 90;
   const allIds = Object.keys(data).map(Number);
   if (!allIds.length) return;
-  const chatIds = allIds.filter((id) => data[id].class === 'chat-node');
-  const sourceIds = allIds.filter((id) => data[id].class !== 'chat-node');
 
-  // Measure real rendered sizes — a group node and a video node are very
-  // different shapes, so a fixed grid cell overlaps one or the other. Pack
-  // using each column's widest node and each row's tallest node instead.
+  const incoming = {};
+  allIds.forEach((id) => { incoming[id] = []; });
+  allIds.forEach((id) => {
+    Object.values(data[id].outputs || {}).forEach((out) => {
+      out.connections.forEach((c) => {
+        const target = Number(c.node);
+        if (incoming[target]) incoming[target].push(id);
+      });
+    });
+  });
+
+  // Longest-path layering, memoized. `visiting` guards against an
+  // accidental cycle (e.g. two AI Assistants chained into each other)
+  // recursing forever — a node caught mid-cycle just contributes no extra
+  // depth instead of hanging the layout.
+  const layer = {};
+  const visiting = new Set();
+  function computeLayer(id) {
+    if (layer[id] != null) return layer[id];
+    if (visiting.has(id)) return 0;
+    visiting.add(id);
+    const preds = incoming[id];
+    const l = preds.length ? Math.max(...preds.map(computeLayer)) + 1 : 0;
+    visiting.delete(id);
+    return (layer[id] = l);
+  }
+  allIds.forEach(computeLayer);
+
+  // Real rendered sizes — a group node and a video node are very different
+  // shapes, so columns/rows are sized off actual measurements, not a guess.
   const dims = {};
   allIds.forEach((id) => {
     const el = document.getElementById(`node-${id}`);
     dims[id] = { w: el ? el.offsetWidth : 220, h: el ? el.offsetHeight : 300 };
   });
 
-  const perRow = Math.max(1, Math.round(Math.sqrt(sourceIds.length || 1)));
-  const rows = [];
-  for (let i = 0; i < sourceIds.length; i += perRow) rows.push(sourceIds.slice(i, i + perRow));
-  const colWidths = [];
-  rows.forEach((row) => row.forEach((id, c) => { colWidths[c] = Math.max(colWidths[c] || 0, dims[id].w); }));
+  const maxLayer = Math.max(...allIds.map((id) => layer[id]));
+  const columns = [];
+  for (let l = 0; l <= maxLayer; l++) columns.push(allIds.filter((id) => layer[id] === l));
+  // Sort each column by current vertical position so re-running Organize
+  // on an already-tidy canvas doesn't needlessly shuffle node order.
+  columns.forEach((col) => col.sort((a, b) => data[a].pos_y - data[b].pos_y));
 
-  const positions = {};
-  let y = 0;
-  rows.forEach((row) => {
-    let x = 0;
-    let rowHeight = 0;
-    row.forEach((id, c) => {
-      positions[id] = { x, y };
-      x += colWidths[c] + gap;
-      rowHeight = Math.max(rowHeight, dims[id].h);
+  const colWidths = columns.map((col) => Math.max(0, ...col.map((id) => dims[id].w)));
+  const colHeights = columns.map((col) => col.reduce((sum, id) => sum + dims[id].h, 0) + gap * Math.max(0, col.length - 1));
+  const tallest = Math.max(0, ...colHeights);
+
+  let x = 0;
+  columns.forEach((col, ci) => {
+    let y = (tallest - colHeights[ci]) / 2; // center this column against the tallest one
+    col.forEach((id) => {
+      data[id].pos_x = x; data[id].pos_y = y;
+      const el = document.getElementById(`node-${id}`);
+      if (el) { el.style.left = `${x}px`; el.style.top = `${y}px`; }
+      y += dims[id].h + gap;
     });
-    y += rowHeight + gap;
-  });
-  const gridWidth = colWidths.reduce((a, b) => a + b, 0) + gap * Math.max(0, colWidths.length - 1);
-  const gridHeight = y - gap;
-
-  // Chat node(s) get their own column to the right, vertically centered
-  // against the source grid so connections fan out symmetrically instead
-  // of criss-crossing at odd angles.
-  const chatX = gridWidth + gap * 2;
-  const chatTotalHeight = chatIds.reduce((sum, id) => sum + dims[id].h, 0) + gap * Math.max(0, chatIds.length - 1);
-  let chatY = Math.max(0, (gridHeight - chatTotalHeight) / 2);
-  chatIds.forEach((id) => {
-    positions[id] = { x: chatX, y: chatY };
-    chatY += dims[id].h + gap;
+    x += colWidths[ci] + colGap;
   });
 
-  Object.keys(positions).forEach((id) => {
-    const { x, y } = positions[id];
-    data[id].pos_x = x; data[id].pos_y = y;
-    const el = document.getElementById(`node-${id}`);
-    if (el) { el.style.left = `${x}px`; el.style.top = `${y}px`; }
-  });
   allIds.forEach((id) => editor.updateConnectionNodes(`node-${id}`));
   saveCanvasState();
 }
@@ -1413,7 +1548,7 @@ function initEditor() {
   editor.on('nodeCreated', () => saveCanvasState());
   editor.on('nodeRemoved', () => saveCanvasState());
   editor.on('nodeMoved', () => saveCanvasState());
-  editor.on('connectionCreated', () => { saveCanvasState(); refreshAllChatAttachments(); });
+  editor.on('connectionCreated', (conn) => { saveCanvasState(); refreshAllChatAttachments(); flashConnectionDots(conn); });
   editor.on('connectionRemoved', () => { saveCanvasState(); hideConnectionDelete(); refreshAllChatAttachments(); });
 
   // A selected connection gets a floating × instead of relying on the
@@ -1446,8 +1581,13 @@ function initEditor() {
 
   document.addEventListener('keydown', (e) => {
     if (!(e.ctrlKey || e.metaKey)) return;
+    const tag = document.activeElement?.tagName;
+    if (tag === 'INPUT' || tag === 'TEXTAREA') return; // let native undo work in text fields
     if (e.key === '+' || e.key === '=') { e.preventDefault(); setZoom(editor.zoom * 1.15); }
     else if (e.key === '-') { e.preventDefault(); setZoom(editor.zoom * 0.87); }
+    else if (e.key.toLowerCase() === 'z' && e.shiftKey) { e.preventDefault(); redoCanvas(); }
+    else if (e.key.toLowerCase() === 'z') { e.preventDefault(); undoCanvas(); }
+    else if (e.key.toLowerCase() === 'y') { e.preventDefault(); redoCanvas(); }
   });
   $('zoom-in-btn').addEventListener('click', () => setZoom(editor.zoom * 1.15));
   $('zoom-out-btn').addEventListener('click', () => setZoom(editor.zoom * 0.87));
@@ -1458,6 +1598,18 @@ function initEditor() {
     const centerY = (editor.container.clientHeight / 2) / editor.zoom - editor.canvas_y / editor.zoom;
     const id = editor.addNode('chat', 1, 1, centerX, centerY, 'chat-node', {}, buildChatNodeHtml());
     wireChatNode(id);
+  });
+
+  // Fullscreen covers as much as the browser will let a web page cover — the
+  // whole viewport, tab/address bar hidden — which is the ceiling of what
+  // the Fullscreen API can do; it can't reach outside the browser window
+  // itself (e.g. the OS title bar) the way a native app could.
+  $('fullscreen-btn').addEventListener('click', () => {
+    if (document.fullscreenElement) document.exitFullscreen();
+    else document.documentElement.requestFullscreen().catch(() => {});
+  });
+  document.addEventListener('fullscreenchange', () => {
+    $('fullscreen-btn').innerHTML = icon(document.fullscreenElement ? 'shrink' : 'expand', { size: 14 });
   });
 
   function clientToCanvas(clientX, clientY) {
@@ -1505,6 +1657,13 @@ async function openSpace(id) {
   }
   ensureChatNode();
   applyTransform();
+  // Baseline for undo/redo *before* the auto-organize below runs, so if
+  // someone doesn't like the auto-tidy they can still Ctrl+Z right back to
+  // their exact previous layout.
+  lastSnapshot = JSON.stringify(state.editor.export());
+  // Auto-tidy on every load — so a canvas nudged out of order never stays
+  // that way just because someone forgot to hit Organize before leaving.
+  if (space.canvasState) { organizeNodes(); recenterOnContent(); }
   loadTrackedCategories();
 }
 
@@ -1714,19 +1873,15 @@ async function loadTrackedCategories() {
   const container = $('tracked-cats');
   container.innerHTML = '';
   categories.forEach((cat) => {
-    const creators = bookmarks.filter((b) => b.categoryId === cat.id);
+    const creators = bookmarks.filter((b) => (b.categoryIds || []).includes(cat.id));
     if (!creators.length) return;
     const box = document.createElement('div');
     box.className = 'tracked-cat';
     box.innerHTML = `
-      <div class="tracked-cat-head">${icon('chev', { size: 13 })}<span>${escapeHtml(cat.name)}</span><button class="icon-btn tiny cat-manage-btn" title="Manage category">${icon('more', { size: 12 })}</button></div>
+      <div class="tracked-cat-head">${icon('chev', { size: 13 })}<span>${escapeHtml(cat.name)}</span></div>
       <div class="tracked-cat-body"></div>
     `;
     box.querySelector('.tracked-cat-head').addEventListener('click', () => box.classList.toggle('open'));
-    box.querySelector('.cat-manage-btn').addEventListener('click', (e) => {
-      e.stopPropagation();
-      openManageCategoryModal(cat);
-    });
     const body = box.querySelector('.tracked-cat-body');
     creators.forEach((c) => {
       const row = document.createElement('label');
@@ -1784,47 +1939,84 @@ $('show-all-toggle').addEventListener('change', (e) => {
   loadTrackedCategories();
 });
 
-// --- manage category modal (rename / delete / untrack a creator) --------
+// --- manage-all modal: one place to rename/delete categories and put a --
+// --- creator in any number of them, or untrack them entirely -----------
 
-async function openManageCategoryModal(cat) {
-  $('manage-cat-name-input').value = cat.name;
-  const listEl = $('manage-cat-creators');
-  function render() {
-    const creators = state.allTracked.filter((b) => b.categoryId === cat.id);
-    listEl.innerHTML = creators.length ? '' : '<div class="empty-cat-note">No creators in this category.</div>';
-    creators.forEach((c) => {
-      const row = document.createElement('div');
-      row.className = 'manage-cat-row';
-      row.innerHTML = `<span>@${escapeHtml(c.handle)}</span><button class="icon-btn tiny remove-creator-btn" title="Stop tracking">${icon('close', { size: 11 })}</button>`;
-      row.querySelector('.remove-creator-btn').addEventListener('click', async () => {
-        if (!confirm(`Stop tracking @${c.handle}?`)) return;
-        await fetchJSON('/api/bookmarks', { method: 'POST', body: { handle: c.handle, action: 'remove' } });
-        state.checkedHandles.delete(c.handle);
-        removeFromPoolByHandle(c.handle);
-        await loadTrackedCategories();
-        render();
-      });
-      listEl.appendChild(row);
+function renderManageMatrix() {
+  const table = $('manage-matrix');
+  const categories = state.categories;
+  const creators = state.allTracked;
+  const head = `<tr><th>Creator</th>${categories.map((cat) => `
+    <th><div class="cat-th-row">
+      <input type="text" class="cat-rename-input" data-id="${cat.id}" value="${escapeHtml(cat.name)}" />
+      <button class="icon-btn tiny cat-del-btn" data-id="${cat.id}" title="Delete category">${icon('close', { size: 9 })}</button>
+    </div></th>`).join('')}<th></th></tr>`;
+  const rows = creators.map((c) => `<tr>
+    <td>@${escapeHtml(c.handle)}</td>
+    ${categories.map((cat) => `<td><input type="checkbox" class="checkbox mtx-check" data-handle="${c.handle}" data-cat="${cat.id}" ${(c.categoryIds || []).includes(cat.id) ? 'checked' : ''} /></td>`).join('')}
+    <td><button class="icon-btn tiny untrack-btn" data-handle="${c.handle}" title="Stop tracking">${icon('close', { size: 10 })}</button></td>
+  </tr>`).join('');
+  table.innerHTML = head + (rows || `<tr><td colspan="${categories.length + 2}" style="color:var(--text-faint)">No tracked creators yet.</td></tr>`);
+
+  table.querySelectorAll('.mtx-check').forEach((box) => {
+    box.addEventListener('change', async (e) => {
+      const handle = e.target.dataset.handle;
+      const creator = state.allTracked.find((c) => c.handle === handle);
+      const current = new Set(creator.categoryIds || []);
+      const catId = Number(e.target.dataset.cat);
+      if (e.target.checked) current.add(catId); else current.delete(catId);
+      creator.categoryIds = [...current]; // optimistic, so re-render below reflects it immediately
+      await fetchJSON('/api/bookmarks/categories', { method: 'POST', body: { handle, categoryIds: [...current] } });
+      loadTrackedCategories();
     });
-  }
-  render();
-  $('manage-cat-modal').classList.add('open');
-
-  $('manage-cat-cancel').onclick = () => $('manage-cat-modal').classList.remove('open');
-  $('manage-cat-save').onclick = async () => {
-    const name = $('manage-cat-name-input').value.trim();
-    if (!name || name === cat.name) { $('manage-cat-modal').classList.remove('open'); return; }
-    await fetchJSON(`/api/creator-categories/${cat.id}`, { method: 'PATCH', body: { name } });
-    $('manage-cat-modal').classList.remove('open');
-    loadTrackedCategories();
-  };
-  $('manage-cat-delete').onclick = async () => {
-    if (!confirm(`Delete category "${cat.name}"? Its creators stay tracked but become uncategorized.`)) return;
-    await fetchJSON(`/api/creator-categories/${cat.id}`, { method: 'DELETE' });
-    $('manage-cat-modal').classList.remove('open');
-    loadTrackedCategories();
-  };
+  });
+  table.querySelectorAll('.cat-rename-input').forEach((input) => {
+    input.addEventListener('blur', async () => {
+      const cat = categories.find((c) => c.id === Number(input.dataset.id));
+      const name = input.value.trim();
+      if (!name || name === cat.name) { input.value = cat.name; return; }
+      await fetchJSON(`/api/creator-categories/${cat.id}`, { method: 'PATCH', body: { name } });
+      await loadTrackedCategories();
+    });
+    input.addEventListener('keydown', (e) => { if (e.key === 'Enter') input.blur(); });
+  });
+  table.querySelectorAll('.cat-del-btn').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      const cat = categories.find((c) => c.id === Number(btn.dataset.id));
+      if (!confirm(`Delete category "${cat.name}"? Its creators stay tracked.`)) return;
+      await fetchJSON(`/api/creator-categories/${cat.id}`, { method: 'DELETE' });
+      await loadTrackedCategories();
+      renderManageMatrix();
+    });
+  });
+  table.querySelectorAll('.untrack-btn').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      const handle = btn.dataset.handle;
+      if (!confirm(`Stop tracking @${handle}?`)) return;
+      await fetchJSON('/api/bookmarks', { method: 'POST', body: { handle, action: 'remove' } });
+      state.checkedHandles.delete(handle);
+      removeFromPoolByHandle(handle);
+      await loadTrackedCategories();
+      renderManageMatrix();
+    });
+  });
 }
+
+function openManageAllModal() {
+  renderManageMatrix();
+  $('manage-cat-modal').classList.add('open');
+}
+$('manage-all-btn').addEventListener('click', openManageAllModal);
+$('manage-cat-close').addEventListener('click', () => $('manage-cat-modal').classList.remove('open'));
+$('manage-new-cat-btn').addEventListener('click', async () => {
+  const input = $('manage-new-cat-input');
+  const name = input.value.trim();
+  if (!name) return;
+  await fetchJSON('/api/creator-categories', { method: 'POST', body: { name } });
+  input.value = '';
+  await loadTrackedCategories();
+  renderManageMatrix();
+});
 
 // --- boot -------------------------------------------------------------
 

@@ -101,6 +101,12 @@ async function queryAll(sql, args = []) {
 await run(`CREATE TABLE IF NOT EXISTS creators (handle TEXT PRIMARY KEY, profile JSON)`);
 await run(`CREATE TABLE IF NOT EXISTS reels (handle TEXT PRIMARY KEY, data JSON)`);
 await run(`CREATE TABLE IF NOT EXISTS bookmarks (handle TEXT PRIMARY KEY, added_at TEXT, category_id INTEGER)`);
+// A creator can belong to more than one category (v1's manage-categories
+// modal needs this); bookmarks.category_id above is kept as-is and still
+// drives the base app's single-category drag-and-drop UI unchanged — it's
+// always kept equal to this table's lowest category_id per handle.
+await run(`CREATE TABLE IF NOT EXISTS bookmark_categories (handle TEXT NOT NULL, category_id INTEGER NOT NULL, PRIMARY KEY (handle, category_id))`);
+await run(`INSERT OR IGNORE INTO bookmark_categories (handle, category_id) SELECT handle, category_id FROM bookmarks WHERE category_id IS NOT NULL`);
 await run(`CREATE TABLE IF NOT EXISTS transcripts (shortcode TEXT PRIMARY KEY, data JSON)`);
 await run(`CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT)`);
 await run(`CREATE TABLE IF NOT EXISTS creator_categories (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL)`);
@@ -171,19 +177,54 @@ async function isBookmarked(handle) {
 }
 
 async function listBookmarks() {
-  const rows = await queryAll('SELECT handle, added_at, category_id FROM bookmarks ORDER BY added_at');
+  const [rows, catRows] = await Promise.all([
+    queryAll('SELECT handle, added_at FROM bookmarks ORDER BY added_at'),
+    queryAll('SELECT handle, category_id FROM bookmark_categories ORDER BY category_id'),
+  ]);
+  const catsByHandle = new Map();
+  for (const r of catRows) {
+    if (!catsByHandle.has(r.handle)) catsByHandle.set(r.handle, []);
+    catsByHandle.get(r.handle).push(r.category_id);
+  }
   return Promise.all(
-    rows.map(async (row) => ({
-      handle: row.handle,
-      addedAt: row.added_at,
-      categoryId: row.category_id,
-      profile: await getCreatorProfile(row.handle),
-    }))
+    rows.map(async (row) => {
+      const categoryIds = catsByHandle.get(row.handle) || [];
+      return {
+        handle: row.handle,
+        addedAt: row.added_at,
+        categoryId: categoryIds[0] ?? null, // back-compat: base app's single-category UI
+        categoryIds, // full membership, used by v1's multi-category manage modal
+        profile: await getCreatorProfile(row.handle),
+      };
+    })
   );
 }
 
+// Keeps bookmarks.category_id (the base app's single-category column) equal
+// to the lowest id in bookmark_categories, so nothing there needs to change.
+async function syncPrimaryCategoryColumn(handle) {
+  const row = await queryOne('SELECT MIN(category_id) AS id FROM bookmark_categories WHERE handle = ?', [handle]);
+  await run('UPDATE bookmarks SET category_id = ? WHERE handle = ?', [row?.id ?? null, handle]);
+}
+
+// Replaces a creator's category membership with exactly one category — this
+// is what the base app's drag-and-drop ("move this chip to that section")
+// UI calls, so it keeps that replace-not-add semantics.
 async function setBookmarkCategory(handle, categoryId) {
-  await run('UPDATE bookmarks SET category_id = ? WHERE handle = ?', [categoryId, handle]);
+  await run('DELETE FROM bookmark_categories WHERE handle = ?', [handle]);
+  if (categoryId != null) await run('INSERT OR IGNORE INTO bookmark_categories (handle, category_id) VALUES (?, ?)', [handle, categoryId]);
+  await syncPrimaryCategoryColumn(handle);
+}
+
+// Replaces a creator's category membership with an arbitrary set — this is
+// what v1's manage-categories modal uses to put one creator in several
+// categories at once.
+async function setBookmarkCategories(handle, categoryIds) {
+  await run('DELETE FROM bookmark_categories WHERE handle = ?', [handle]);
+  for (const id of categoryIds) {
+    await run('INSERT OR IGNORE INTO bookmark_categories (handle, category_id) VALUES (?, ?)', [handle, id]);
+  }
+  await syncPrimaryCategoryColumn(handle);
 }
 
 // --- creator categories ----------------------------------------------------
@@ -203,8 +244,10 @@ async function renameCategory(table, id, name) {
 }
 
 async function deleteCreatorCategory(id) {
+  const rows = await queryAll('SELECT handle FROM bookmark_categories WHERE category_id = ?', [id]);
+  await run('DELETE FROM bookmark_categories WHERE category_id = ?', [id]);
   await run('UPDATE bookmarks SET category_id = NULL WHERE category_id = ?', [id]);
-  await run('DELETE FROM creator_categories WHERE id = ?', [id]);
+  await Promise.all(rows.map((r) => syncPrimaryCategoryColumn(r.handle)));
 }
 
 // --- video categories + per-video bookmarks (independent of creator categories) --
@@ -284,6 +327,7 @@ async function addBookmark(handle) {
 
 async function removeBookmark(handle) {
   await run('DELETE FROM bookmarks WHERE handle = ?', [handle]);
+  await run('DELETE FROM bookmark_categories WHERE handle = ?', [handle]);
 }
 
 async function getCachedTranscript(shortcode) {
@@ -657,6 +701,15 @@ app.post('/api/bookmarks/category', async (req, res) => {
   const { handle, categoryId } = req.body || {};
   if (!handle) return res.status(400).json({ error: 'handle is required.' });
   await setBookmarkCategory(handle.toLowerCase(), categoryId ?? null);
+  res.json({ bookmarks: await listBookmarks() });
+});
+
+// Multi-category variant (v1's manage-categories modal) — sets the full
+// membership list at once, rather than replacing with a single category.
+app.post('/api/bookmarks/categories', async (req, res) => {
+  const { handle, categoryIds } = req.body || {};
+  if (!handle || !Array.isArray(categoryIds)) return res.status(400).json({ error: 'handle and categoryIds[] are required.' });
+  await setBookmarkCategories(handle.toLowerCase(), categoryIds.map(Number));
   res.json({ bookmarks: await listBookmarks() });
 });
 
