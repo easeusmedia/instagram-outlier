@@ -206,12 +206,22 @@
   .empty-note { color: var(--text-faint); font-size: 13px; grid-column: 1 / -1; text-align: center; padding: 20px 0; }
 
   /* --- canvas view ----------------------------------------------------- */
-  #canvas-view { height: 100%; display: flex; flex-direction: column; }
+  #canvas-view { height: 100%; display: flex; flex-direction: column; position: relative; }
   .canvas-header {
     display: flex; align-items: center; gap: 10px; padding: 14px 22px;
     background: rgba(6,7,8,0.7); backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur);
     border-bottom: 1px solid var(--border); flex-shrink: 0; z-index: 5;
   }
+  /* Fullscreen only: take the header out of the layout flow entirely, so
+     .canvas-layout fills the *full* height of #canvas-view instead of
+     "full height minus a reserved header-sized gap". Without this, fading
+     the header to invisible still left its ~63px of reserved flex-row
+     space behind — a plain gap with none of the canvas's dot-grid/
+     vignette, which is exactly the flat "cut" band that showed even with
+     nothing rendering in it. The header now floats over the canvas
+     instead of pushing it down, only where it's meant to disappear at
+     all — normal (non-fullscreen) layout is untouched. */
+  .is-fullscreen .canvas-header { position: absolute; top: 0; left: 0; right: 0; }
   .canvas-header h2 { font-size: 14.5px; font-weight: 500; color: var(--text); }
   .canvas-header .save-status { color: var(--text-faint); font-size: 11.5px; margin-left: auto; margin-right: 4px; }
   .header-hideable { display: flex; align-items: center; gap: 10px; flex: 1; min-width: 0; }
