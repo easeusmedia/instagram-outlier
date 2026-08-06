@@ -1600,6 +1600,7 @@ function recenterOnContent() {
   const ids = Object.keys(data);
   if (!ids.length) { editor.zoom = 1; editor.canvas_x = 0; editor.canvas_y = 0; applyTransform(); return; }
   let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  const centersX = [], centersY = [];
   ids.forEach((id) => {
     const el = document.getElementById(`node-${id}`);
     const w = el ? el.offsetWidth : 220, h = el ? el.offsetHeight : 300;
@@ -1607,13 +1608,27 @@ function recenterOnContent() {
     minY = Math.min(minY, data[id].pos_y);
     maxX = Math.max(maxX, data[id].pos_x + w);
     maxY = Math.max(maxY, data[id].pos_y + h);
+    centersX.push(data[id].pos_x + w / 2);
+    centersY.push(data[id].pos_y + h / 2);
   });
+  // The pivot is the *median* node center, not the bounding-box midpoint —
+  // one node dragged far off from the rest drags a min/max midpoint right
+  // along with it, landing the "center" somewhere between the outlier and
+  // everything else instead of on the cluster where most of the actual
+  // work lives. The zoom-to-fit below still uses the full bounding box (so
+  // nothing goes missing off-screen), only the pan target changes.
+  const median = (arr) => {
+    const s = [...arr].sort((a, b) => a - b);
+    const mid = Math.floor(s.length / 2);
+    return s.length % 2 ? s[mid] : (s[mid - 1] + s[mid]) / 2;
+  };
+  const focusX = median(centersX), focusY = median(centersY);
   const rect = editor.container.getBoundingClientRect();
   const contentW = maxX - minX + 120, contentH = maxY - minY + 120;
   const zoom = Math.max(editor.zoom_min, Math.min(editor.zoom_max, Math.min(rect.width / contentW, rect.height / contentH, 1)));
   editor.zoom = zoom;
-  editor.canvas_x = rect.width / 2 - ((minX + maxX) / 2) * zoom;
-  editor.canvas_y = rect.height / 2 - ((minY + maxY) / 2) * zoom;
+  editor.canvas_x = rect.width / 2 - focusX * zoom;
+  editor.canvas_y = rect.height / 2 - focusY * zoom;
   applyTransform();
 }
 
@@ -1636,7 +1651,16 @@ function initEditor() {
     e.stopImmediatePropagation();
     if (e.ctrlKey || e.metaKey) {
       const factor = Math.exp(-e.deltaY * 0.0035);
-      setZoom(editor.zoom * factor, e.clientX, e.clientY);
+      // A trackpad pinch doesn't move the OS cursor at all — it's a
+      // separate gesture layered on top of wherever the pointer already
+      // is — so the browser has to attach *some* clientX/clientY to the
+      // synthetic wheel event it generates, and that value can end up far
+      // from where the cursor is actually rendered on screen (confirmed
+      // directly on a real recording: the visible cursor never moved, yet
+      // the zoom kept anchoring somewhere else entirely). lastPointer is
+      // our own independent mousemove tracking, immune to that — same
+      // source the toolbar buttons already use for the identical reason.
+      setZoom(editor.zoom * factor, lastPointer?.x ?? e.clientX, lastPointer?.y ?? e.clientY);
     } else {
       editor.canvas_x -= e.deltaX;
       editor.canvas_y -= e.deltaY;
