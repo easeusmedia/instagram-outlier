@@ -422,13 +422,27 @@ function quantile(sorted, q) {
 }
 
 // Instagram (via the scraper) reports two different metrics: videoViewCount
-// and videoPlayCount ("plays", counts every replay/autoplay loop). Verified
-// directly against Instagram's own grid (the small eye-icon count) for a
-// real reel: it matched videoPlayCount, while videoViewCount read roughly
-// half that — so videoPlayCount is the one that belongs in the "views"
-// column. videoViewCount is kept only as a fallback for the rare case
-// videoPlayCount is missing, so a reel isn't dropped from the outlier math
-// entirely over one absent field.
+// and videoPlayCount ("plays", counts every replay/autoplay loop) — verified
+// directly against Instagram's own grid for a real reel, videoPlayCount is
+// the one matching what's actually displayed, and plays >= views always
+// (confirmed across a fresh live sample: every reel had videoPlayCount
+// roughly 2x videoViewCount, never the reverse). It used to be `play ??
+// view` — but the scraper intermittently omits videoPlayCount on an
+// otherwise-normal item (confirmed live: a re-scrape of the same reel had
+// it present one run and missing the next), and `??` only falls back when
+// a field is *entirely absent* — it can't tell "genuinely missing" apart
+// from "present but 0", and more importantly a `??` fallback, once it
+// picks the smaller videoViewCount for a reel, never self-corrects on a
+// later refresh if that refresh happens to hit the same gap. Taking
+// whichever of the two is larger whenever both are present is
+// self-correcting on every refresh and never displays a number smaller
+// than what Instagram itself would show.
+function pickViews(it) {
+  const play = numOrNull(it.videoPlayCount);
+  const view = numOrNull(it.videoViewCount);
+  if (play != null && view != null) return Math.max(play, view);
+  return play ?? view;
+}
 const OUTLIER_SCORE_CAP = 100;
 
 function normalizeReelItem(it) {
@@ -439,7 +453,7 @@ function normalizeReelItem(it) {
     caption: it.caption || '',
     thumbnail: it.displayUrl || it.thumbnailUrl || '',
     videoUrl: it.videoUrl || null,
-    views: numOrNull(it.videoPlayCount ?? it.videoViewCount),
+    views: pickViews(it),
     likes: numOrNull(it.likesCount),
     duration: numOrNull(it.videoDuration),
     timestamp: it.timestamp || null,
@@ -1068,6 +1082,20 @@ async function migrateStaleViewCounts() {
   await run("INSERT INTO settings (key, value) VALUES ('viewsMigrationV1', '1')");
 }
 await migrateStaleViewCounts();
+
+// Same shape as the migration above, one more time: `videoPlayCount ??
+// videoViewCount` could get stuck on the smaller videoViewCount forever
+// once a scrape happened to catch videoPlayCount missing (confirmed live —
+// the same reel had it present on one run and absent on the next), since
+// `??` never revisits a value it already picked. pickViews' max-of-both
+// fixes this going forward, but anything cached under the old logic needs
+// one more forced re-scrape to actually pick up the corrected number.
+async function migrateViewsMaxFix() {
+  if (await queryOne("SELECT value FROM settings WHERE key = 'viewsMigrationV2'")) return;
+  await run('DELETE FROM creator_checks');
+  await run("INSERT INTO settings (key, value) VALUES ('viewsMigrationV2', '1')");
+}
+await migrateViewsMaxFix();
 
 app.listen(PORT, () => {
   console.log(`Instagram Outlier running at http://localhost:${PORT}`);
