@@ -271,6 +271,16 @@
     background-repeat: repeat, no-repeat, no-repeat;
   }
   .parent-drawflow { background: transparent !important; }
+  /* Every screen<->canvas conversion in this file (clientToCanvas, setZoom's
+     pivot math, the connection-delete button's placement) assumes the
+     precanvas's `translate(canvas_x,canvas_y) scale(zoom)` transform pivots
+     around its top-left corner. The CSS default is the element's *center*,
+     which silently shifts every one of those conversions by
+     center*(1-zoom) — invisible at 100% zoom (the term is 0) and glaring at
+     any other zoom, which is exactly why the frame tool only ever landed
+     off-target once you'd zoomed out. Pinning the origin to 0 0 makes the
+     actual rendering match what the math already assumes everywhere else. */
+  .drawflow { transform-origin: 0 0; }
   /* Drawflow's own stylesheet uses nested selectors like ".drawflow .drawflow-node",
      which beats a bare ".drawflow-node" override on specificity regardless of CSS
      source order — so every override below matches that same nesting depth. */
@@ -382,7 +392,9 @@
 
   .video-node { width: var(--reel-w); }
 
-  .group-node { width: auto; max-width: 740px; }
+  /* No max-width — the card should keep stretching to fit every video
+     dropped in rather than capping out and scrolling sideways. */
+  .group-node { width: auto; }
   .group-node .head { display: flex; align-items: center; gap: 6px; padding: 11px 14px; border-bottom: 1px solid var(--border); }
   .group-node .head .name { font-weight: 500; font-size: 13px; flex: 1; color: var(--text); }
   .group-node .head input.rename-input { display: none; }
