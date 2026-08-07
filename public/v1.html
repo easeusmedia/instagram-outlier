@@ -290,6 +290,13 @@
     box-shadow: 0 0 0 1px var(--accent-soft), 0 14px 34px rgba(0,0,0,0.5);
   }
   .drawflow .drawflow-node:hover { cursor: grab; }
+  /* Drawflow stacks nodes in plain DOM order, so a video card being
+     dragged over a group card that happens to sit later in the DOM would
+     render *underneath* it mid-drag — only "popping" on top at the very
+     end. Drawflow marks whatever's being dragged with .selected, so
+     bumping that above the pack keeps the dragged card on top the whole
+     way, not just after drop. */
+  .drawflow .drawflow-node.selected { z-index: 12; }
   /* The frame tool's crosshair needs to win even over a node's own
      :hover cursor rule above — an inherited cursor from the ancestor
      alone wouldn't, since that rule sets cursor directly on the node. */
@@ -1182,19 +1189,37 @@ function wireGroupNode(nodeId) {
   inputEl.addEventListener('keydown', (e) => { if (e.key === 'Enter') inputEl.blur(); });
 }
 
+// Finds the group-node (if any) whose rendered box contains a screen
+// point — real getBoundingClientRect() rects, not data.pos_x/pos_y run
+// through zoom/pan by hand (that desyncs from what's actually on screen
+// after a drag; see tryMergeIntoGroup below). Shared by dragging an
+// existing canvas node onto a group and dropping a fresh one from the
+// sidebar onto a group.
+function groupAtPoint(clientX, clientY) {
+  return findNodesByClass('group-node').find((id) => {
+    const el = document.getElementById(`node-${id}`);
+    if (!el) return false;
+    const r = el.getBoundingClientRect();
+    return clientX >= r.left && clientX <= r.right && clientY >= r.top && clientY <= r.bottom;
+  });
+}
+
+// Appends one or more videos into an existing group's filmstrip and
+// re-renders it — the actual "merge" step, shared by every path that can
+// land a video on top of a group.
+function mergeVideosIntoGroup(groupId, videos) {
+  const g = state.editor.drawflow.drawflow.Home.data[groupId];
+  state.editor.updateNodeDataFromId(groupId, { ...g.data, videos: [...g.data.videos, ...videos] });
+  rebuildNodeHtml(groupId);
+  state.editor.updateConnectionNodes(`node-${groupId}`);
+}
+
 // Dropping a standalone video-node onto an existing group's rendered
 // rect merges it straight into that group's filmstrip — same idea as
 // dragging a card into a Figma frame. Fires from the editor's
 // 'nodeMoved' event, so it's checked on every drag release, not just
 // drops from the sidebar. Overlap is decided by the *moved* node's
 // center landing inside the group's box, not just touching it.
-//
-// Hit-testing uses getBoundingClientRect() on both elements — real
-// screen-space rects — rather than converting data.pos_x/pos_y through
-// zoom/pan by hand. Drawflow's own drag code writes a node's rendered
-// position straight to the DOM on every mousemove tick; going through
-// the same rendered geometry sidesteps ever needing those two coordinate
-// spaces to agree with each other.
 function tryMergeIntoGroup(nodeId) {
   const data = state.editor.drawflow.drawflow.Home.data;
   const moved = data[nodeId];
@@ -1202,19 +1227,10 @@ function tryMergeIntoGroup(nodeId) {
   const movedEl = document.getElementById(`node-${nodeId}`);
   if (!movedEl) return false;
   const mr = movedEl.getBoundingClientRect();
-  const cx = mr.left + mr.width / 2, cy = mr.top + mr.height / 2;
-  const groupId = findNodesByClass('group-node').find((id) => {
-    const gEl = document.getElementById(`node-${id}`);
-    if (!gEl) return false;
-    const gr = gEl.getBoundingClientRect();
-    return cx >= gr.left && cx <= gr.right && cy >= gr.top && cy <= gr.bottom;
-  });
+  const groupId = groupAtPoint(mr.left + mr.width / 2, mr.top + mr.height / 2);
   if (groupId == null) return false;
-  const g = data[groupId];
-  state.editor.updateNodeDataFromId(groupId, { ...g.data, videos: [...g.data.videos, moved.data] });
+  mergeVideosIntoGroup(groupId, [moved.data]);
   state.editor.removeNodeId(`node-${nodeId}`);
-  rebuildNodeHtml(groupId);
-  state.editor.updateConnectionNodes(`node-${groupId}`);
   return true;
 }
 
@@ -1973,6 +1989,16 @@ function initEditor() {
     const raw = e.dataTransfer.getData('application/json');
     if (!raw) return;
     const payload = JSON.parse(raw);
+    // Dropping straight onto an existing group (from the sidebar, same as
+    // dragging an already-on-canvas video onto one) merges into it instead
+    // of dropping a new standalone node/group on top of it.
+    const groupId = groupAtPoint(e.clientX, e.clientY);
+    if (groupId != null) {
+      mergeVideosIntoGroup(groupId, payload.type === 'group' ? payload.videos : [payload]);
+      saveCanvasState();
+      if (payload.type === 'group') { state.selected.clear(); renderResults(); }
+      return;
+    }
     const pos = clientToCanvas(e.clientX, e.clientY);
     if (payload.type === 'group') {
       const id = editor.addNode('group', 0, 1, pos.x, pos.y, 'group-node', { name: 'Group 1', videos: payload.videos }, buildGroupNodeHtml({ name: 'Group 1', videos: payload.videos }));
