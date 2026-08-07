@@ -1376,25 +1376,54 @@ function wireMiniDrag(groupNodeId, miniEl) {
       const hoverId = groupAtPoint(ev.clientX, ev.clientY);
       setHighlight(hoverId != null && hoverId !== groupNodeId ? hoverId : null);
     };
-    const onUp = () => {
+    const onUp = (ev) => {
       document.removeEventListener('mousemove', onMove);
       document.removeEventListener('mouseup', onUp);
-      const dropTarget = targetId; // read before setHighlight(null) clobbers it
       ghost?.remove();
       miniEl.style.opacity = '';
       setHighlight(null);
-      if (!dragging || dropTarget == null) return;
+      if (!dragging) return;
+      // Recomputed fresh here rather than trusting the highlight-tracking
+      // targetId: that variable is null both for "still over its own
+      // group" (a no-op — cancel) and "over nothing at all" (pull it out
+      // onto the canvas) — two cases that need different outcomes, so
+      // groupAtPoint is asked directly what's actually under the cursor
+      // right now instead of reusing a value that can't tell them apart.
+      const landedGroupId = groupAtPoint(ev.clientX, ev.clientY);
+      if (landedGroupId === groupNodeId) return; // dropped back on its own group
       const source = state.editor.drawflow.drawflow.Home.data[groupNodeId];
       const idx = Number(miniEl.dataset.idx);
       const video = source.data.videos[idx];
       state.editor.updateNodeDataFromId(groupNodeId, { ...source.data, videos: source.data.videos.filter((_, i) => i !== idx) });
       rebuildNodeHtml(groupNodeId);
-      mergeVideosIntoGroup(dropTarget, [video]);
+      if (landedGroupId != null) {
+        mergeVideosIntoGroup(landedGroupId, [video]);
+      } else {
+        // Dropped on empty canvas — pull it out into its own standalone
+        // video-node instead of silently discarding the drag.
+        const pos = clientToCanvas(ev.clientX, ev.clientY);
+        const id = state.editor.addNode(video.shortCode, 0, 1, pos.x, pos.y, 'video-node', video, buildVideoNodeHtml(video));
+        wireVideoNode(id);
+      }
       saveCanvasState();
     };
     document.addEventListener('mousemove', onMove);
     document.addEventListener('mouseup', onUp);
   });
+}
+
+// Screen coordinates -> canvas-space coordinates, accounting for the
+// current pan/zoom. Hoisted out of initEditor()'s closure (it only ever
+// needed $('drawflow') and state.editor, both reachable from anywhere) so
+// wireMiniDrag below — which lives outside that closure — can place a
+// node dragged out of a group at the actual drop point instead of only
+// being able to react to *which group* it landed on.
+function clientToCanvas(clientX, clientY) {
+  const rect = $('drawflow').getBoundingClientRect();
+  return {
+    x: (clientX - rect.left) / state.editor.zoom - state.editor.canvas_x / state.editor.zoom,
+    y: (clientY - rect.top) / state.editor.zoom - state.editor.canvas_y / state.editor.zoom,
+  };
 }
 
 // Finds the group-node (if any) whose rendered box contains a screen
@@ -2190,14 +2219,6 @@ function initEditor() {
     $('fullscreen-btn').innerHTML = icon(document.fullscreenElement ? 'shrink' : 'expand', { size: 14 });
     document.body.classList.toggle('is-fullscreen', !!document.fullscreenElement);
   });
-
-  function clientToCanvas(clientX, clientY) {
-    const rect = container.getBoundingClientRect();
-    return {
-      x: (clientX - rect.left) / editor.zoom - editor.canvas_x / editor.zoom,
-      y: (clientY - rect.top) / editor.zoom - editor.canvas_y / editor.zoom,
-    };
-  }
 
   container.addEventListener('dragover', (e) => e.preventDefault());
   container.addEventListener('drop', (e) => {
