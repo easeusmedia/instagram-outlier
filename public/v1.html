@@ -1397,13 +1397,14 @@ function wireMiniDrag(groupNodeId, miniEl) {
       state.editor.updateNodeDataFromId(groupNodeId, { ...source.data, videos: source.data.videos.filter((_, i) => i !== idx) });
       rebuildNodeHtml(groupNodeId);
       if (landedGroupId != null) {
-        mergeVideosIntoGroup(landedGroupId, [video]);
+        mergeVideosIntoGroup(landedGroupId, [video]); // also refreshes chat attachments
       } else {
         // Dropped on empty canvas — pull it out into its own standalone
         // video-node instead of silently discarding the drag.
         const pos = clientToCanvas(ev.clientX, ev.clientY);
         const id = state.editor.addNode(video.shortCode, 0, 1, pos.x, pos.y, 'video-node', video, buildVideoNodeHtml(video));
         wireVideoNode(id);
+        refreshAllChatAttachments(); // group lost a video a chat-node may be connected to
       }
       saveCanvasState();
     };
@@ -1449,6 +1450,7 @@ function mergeVideosIntoGroup(groupId, videos) {
   state.editor.updateNodeDataFromId(groupId, { ...g.data, videos: [...g.data.videos, ...videos] });
   rebuildNodeHtml(groupId);
   state.editor.updateConnectionNodes(`node-${groupId}`);
+  refreshAllChatAttachments(); // any chat-node already connected to this group needs the new video in its chips/context
 }
 
 // Dropping a standalone video-node onto an existing group's rendered
@@ -2144,7 +2146,7 @@ function initEditor() {
   }).observe(editor.precanvas, { attributes: true, attributeFilter: ['style'] });
 
   editor.on('nodeCreated', () => saveCanvasState());
-  editor.on('nodeRemoved', () => saveCanvasState());
+  editor.on('nodeRemoved', () => { saveCanvasState(); refreshAllChatAttachments(); });
   editor.on('nodeMoved', (id) => { tryMergeIntoGroup(id); saveCanvasState(); });
   editor.on('connectionCreated', (conn) => { saveCanvasState(); refreshAllChatAttachments(); flashConnectionDots(conn); });
   editor.on('connectionRemoved', () => { saveCanvasState(); hideConnectionDelete(); refreshAllChatAttachments(); });
