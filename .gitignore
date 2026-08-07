@@ -1,3 +1,4 @@
 node_modules/
 .env
 data/store.db
+.DS_Store

@@ -1,4 +1,4 @@
-# Instagram Outlier
+# Kompass
 
 Local-first tool for studying viral reels from specific Instagram creators you choose. Add an account by username or link, see its reels scored by outlier (views ÷ that creator's median views), bookmark accounts, and browse a combined feed with filters/sort.
 

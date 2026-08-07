@@ -157,6 +157,14 @@ await run(`CREATE TABLE IF NOT EXISTS creator_checks (handle TEXT PRIMARY KEY, c
 // whatever editor.export() produced last, saved back verbatim.
 await run(`CREATE TABLE IF NOT EXISTS spaces (id SERIAL PRIMARY KEY, name TEXT NOT NULL, canvas_state TEXT, created_at TEXT)`);
 await run(`CREATE TABLE IF NOT EXISTS users (id SERIAL PRIMARY KEY, email TEXT UNIQUE NOT NULL, password_hash TEXT NOT NULL, is_admin BOOLEAN NOT NULL DEFAULT FALSE, created_at TEXT NOT NULL)`);
+// Added after the table already existed in production — ADD COLUMN IF NOT
+// EXISTS patches it in place instead of needing a separate migration flag.
+await run(`ALTER TABLE users ADD COLUMN IF NOT EXISTS name TEXT`);
+// FALSE only for accounts that have never actually set a password (Google-
+// only logins, upserted with a random unusable placeholder hash below) —
+// lets /api/account/password skip the "confirm current password" check for
+// those, since Google's own login already proved identity this session.
+await run(`ALTER TABLE users ADD COLUMN IF NOT EXISTS has_password BOOLEAN NOT NULL DEFAULT TRUE`);
 
 // Seeds one admin account from env vars (never hardcode real credentials in
 // source — this repo is version-controlled). Set ADMIN_EMAIL/ADMIN_PASSWORD
@@ -656,6 +664,14 @@ app.get('/auth/google/callback', async (req, res) => {
     if (!email || !user.email_verified || (ALLOWED_EMAILS.length && !ALLOWED_EMAILS.includes(email))) {
       return res.status(403).send('This Google account is not authorized to use this app.');
     }
+    // Ensures a users row exists for every Google login too, so account
+    // settings (display name, etc.) have somewhere to persist to. The
+    // placeholder password can never be guessed/typed, so /auth/login stays
+    // closed for this account until they explicitly set a real password.
+    await run(
+      'INSERT INTO users (email, password_hash, has_password, created_at) VALUES (?, ?, ?, ?) ON CONFLICT(email) DO NOTHING',
+      [email, hashPassword(crypto.randomBytes(32).toString('hex')), false, new Date().toISOString()]
+    );
     res.setHeader('Set-Cookie', [
       'oauth_state=; Path=/; Max-Age=0',
       `session=${makeSessionCookie(email)}; HttpOnly; Path=/; Max-Age=${SESSION_MAX_AGE_MS / 1000}; SameSite=Lax`,
@@ -703,6 +719,53 @@ app.get('/auth/logout', (req, res) => {
 app.get('/api/me', (req, res) => {
   const email = AUTH_ENABLED ? verifySessionCookie(parseCookies(req).session) : null;
   res.json({ authEnabled: AUTH_ENABLED, email });
+});
+
+function sessionEmail(req) {
+  return AUTH_ENABLED ? verifySessionCookie(parseCookies(req).session) : null;
+}
+
+app.get('/api/account', async (req, res) => {
+  const email = sessionEmail(req);
+  if (!email) return res.status(401).json({ error: 'Sign in required.' });
+  const user = await queryOne('SELECT name, is_admin, has_password FROM users WHERE email = ?', [email]);
+  res.json({ email, name: user?.name || '', isAdmin: !!user?.is_admin, hasPassword: !!user?.has_password });
+});
+
+app.patch('/api/account', async (req, res) => {
+  const email = sessionEmail(req);
+  if (!email) return res.status(401).json({ error: 'Sign in required.' });
+  const name = ((req.body && req.body.name) || '').trim();
+  await run('UPDATE users SET name = ? WHERE email = ?', [name || null, email]);
+  res.json({ ok: true });
+});
+
+app.post('/api/account/password', async (req, res) => {
+  const email = sessionEmail(req);
+  if (!email) return res.status(401).json({ error: 'Sign in required.' });
+  const { currentPassword, newPassword } = req.body || {};
+  if (!newPassword || newPassword.length < 8) {
+    return res.status(400).json({ error: 'New password must be at least 8 characters.' });
+  }
+  const user = await queryOne('SELECT password_hash, has_password FROM users WHERE email = ?', [email]);
+  if (!user) return res.status(404).json({ error: 'Account not found.' });
+  // A Google-only account has never had a real password to confirm —
+  // signing in with Google already proved identity for this session.
+  if (user.has_password && !verifyPassword(currentPassword || '', user.password_hash)) {
+    return res.status(401).json({ error: 'Current password is incorrect.' });
+  }
+  await run('UPDATE users SET password_hash = ?, has_password = TRUE WHERE email = ?', [hashPassword(newPassword), email]);
+  res.json({ ok: true });
+});
+
+app.delete('/api/account', async (req, res) => {
+  const email = sessionEmail(req);
+  if (!email) return res.status(401).json({ error: 'Sign in required.' });
+  const user = await queryOne('SELECT is_admin FROM users WHERE email = ?', [email]);
+  if (user?.is_admin) return res.status(403).json({ error: "The admin account can't be deleted." });
+  await run('DELETE FROM users WHERE email = ?', [email]);
+  res.setHeader('Set-Cookie', 'session=; Path=/; Max-Age=0');
+  res.json({ ok: true });
 });
 
 if (AUTH_ENABLED) {
@@ -1254,5 +1317,5 @@ async function backfillScriptEmbeddings() {
 await backfillScriptEmbeddings();
 
 app.listen(PORT, () => {
-  console.log(`Instagram Outlier running at http://localhost:${PORT}`);
+  console.log(`Kompass running at http://localhost:${PORT}`);
 });

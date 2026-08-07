@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Instagram Outlier</title>
+<title>Kompass</title>
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
 <style>
@@ -30,6 +30,13 @@
     --hover-glow: 0 4px 14px -2px rgba(0,170,255,0.22);
   }
   * { box-sizing: border-box; }
+  /* Root-cause fix, not a per-link patch: an <a> with no color of its own
+     falls back to the browser's UA default — blue unvisited, purple once
+     visited. Every link elsewhere in this file already sets its own color
+     via a class and wins on specificity, so this only ever catches the
+     ones that don't. */
+  a { color: var(--accent); }
+  a:visited { color: var(--accent); }
   body {
     margin: 0;
     min-height: 100vh;
@@ -579,7 +586,7 @@
 <body>
 
 <header>
-  <div class="brand">Instagram <span>Outlier</span></div>
+  <div class="brand">Kompass</div>
   <div class="header-actions">
     <nav class="tabs">
       <button id="tab-btn-add" class="active">Research</button>

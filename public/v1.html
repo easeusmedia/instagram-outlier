@@ -9,7 +9,7 @@
      brief white flash on load/reload, since the browser's own default
      canvas is white until *something* tells it otherwise. -->
 <meta name="color-scheme" content="dark" />
-<title>Instagram Outlier — v1</title>
+<title>Kompass</title>
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/jerosoler/Drawflow/dist/drawflow.min.css">
@@ -35,6 +35,14 @@
     --reel-w: 140px; /* every reel-shaped card — standalone or inside a group — shares this width */
   }
   * { box-sizing: border-box; }
+  /* Root-cause fix, not a per-link patch: an <a> with no color of its own
+     falls back to the browser's UA default — blue unvisited, purple once
+     visited (exactly what made the Groq link look purple: this profile had
+     already visited it). Every link elsewhere in this file already sets
+     its own color via a class and wins on specificity, so this only ever
+     catches the ones that don't. */
+  a { color: var(--accent); }
+  a:visited { color: var(--accent); }
   html, body { height: 100%; }
   body {
     margin: 0;
@@ -76,18 +84,28 @@
   }
   button.secondary:hover { color: var(--text); border-color: var(--border-hover); }
   button.secondary.active { background: var(--accent-soft); border-color: var(--accent-border); color: var(--text); }
+  button.secondary.danger { color: var(--danger); }
+  button.secondary.danger:hover { border-color: var(--danger); background: rgba(255,107,107,0.1); }
   button.ghost {
     background: transparent; border: 1px dashed var(--border-hover); color: var(--text-faint);
     padding: 9px 14px; border-radius: var(--radius-sm); font-size: 12.5px;
   }
   button.ghost:hover { color: var(--text-dim); border-color: var(--border-hover); }
 
-  input[type="text"], textarea {
+  /* Password fields (added for the Account section) were missing from this
+     selector — they fell back to totally unstyled browser defaults (no
+     width, no padding, no dark background), which is why they looked
+     narrower and out of place next to every other field in the modal. */
+  input[type="text"], input[type="password"], input[type="email"], textarea {
     background: rgba(255,255,255,0.045); border: 1px solid var(--border); color: var(--text);
     padding: 10px 12px; border-radius: var(--radius-sm); font-size: 13px; width: 100%;
   }
-  input[type="text"]:focus, textarea:focus { outline: none; border-color: var(--accent-border); box-shadow: 0 0 0 3px var(--accent-soft); }
-  input[type="text"]::placeholder, textarea::placeholder { color: var(--text-faint); }
+  input[type="text"]:focus, input[type="password"]:focus, input[type="email"]:focus, textarea:focus {
+    outline: none; border-color: var(--accent-border); box-shadow: 0 0 0 3px var(--accent-soft);
+  }
+  input[type="text"]::placeholder, input[type="password"]::placeholder, input[type="email"]::placeholder, textarea::placeholder {
+    color: var(--text-faint);
+  }
 
   .checkbox {
     appearance: none; width: 17px; height: 17px; border-radius: 5px; border: 1px solid var(--border-hover);
@@ -121,10 +139,29 @@
     background: rgba(12,14,17,0.92); backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur);
     border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 26px; width: 380px;
     max-width: calc(100vw - 40px); box-shadow: inset 0 1px 0 rgba(255,255,255,0.05), 0 24px 70px rgba(0,0,0,0.55);
+    /* No cap before this meant a tall modal (Settings, once it grew to three
+       stacked sections) could exceed the viewport with no way to reach the
+       rest — .modal-overlay centers it, so an oversized modal ran off both
+       the top and bottom equally, and nothing here scrolled to compensate. */
+    max-height: calc(100vh - 40px); overflow-y: auto;
   }
   .modal h3 { font-size: 16px; margin-bottom: 4px; font-weight: 500; }
   .modal .modal-desc { color: var(--text-dim); font-size: 12.5px; margin: 0 0 18px; line-height: 1.5; }
   .modal .field { margin-bottom: 14px; }
+  /* Settings: a sidebar of sections instead of stacking Apify/LLM/Account
+     into one long scrolling column — each tab's content is short enough on
+     its own that the modal never needs to scroll at all. */
+  .settings-modal-inner { overflow: visible; max-height: none; }
+  .settings-body { display: flex; gap: 24px; align-items: flex-start; }
+  .settings-nav { display: flex; flex-direction: column; gap: 2px; width: 150px; flex-shrink: 0; }
+  .settings-tab-btn {
+    text-align: left; padding: 9px 12px; border-radius: var(--radius-sm);
+    background: transparent; border: 1px solid transparent; color: var(--text-dim);
+    font-size: 13px; font-weight: 500; cursor: pointer;
+  }
+  .settings-tab-btn:hover { color: var(--text); background: var(--surface); }
+  .settings-tab-btn.active { color: var(--text); background: var(--accent-soft); border-color: var(--accent-border); }
+  .settings-content { flex: 1; min-width: 0; }
   .modal .field label { font-size: 11px; color: var(--text-faint); text-transform: uppercase; letter-spacing: .04em; display: block; margin-bottom: 6px; }
   .modal-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; }
   .modal-header h3 { margin: 0; }
@@ -189,6 +226,10 @@
   .spaces-header h1 { font-size: 20px; font-weight: 500; color: var(--text-dim); }
   .spaces-header .back-link { position: absolute; right: 0; color: var(--text-faint); text-decoration: none; font-size: 12.5px; }
   .spaces-header .back-link:hover { color: var(--text-dim); }
+  /* Lets you reach Settings (and log out) from the spaces list, without
+     first having to open a space just to find the gear icon in its
+     canvas header. */
+  .spaces-header #spaces-settings-btn { position: absolute; left: 0; }
   .create-hero { max-width: 1040px; margin: 0 auto 48px; display: flex; justify-content: center; }
   .create-hero button {
     display: flex; align-items: center; gap: 10px; font-size: 14px; padding: 15px 30px;
@@ -279,7 +320,16 @@
     background-size: 26px 26px, auto, auto;
     background-position: 0 0, 0 0, 0 0;
     background-repeat: repeat, no-repeat, no-repeat;
+    /* Fades in once openSpace() has fully built the canvas (nodes, camera
+       position) — kept off #canvas-view itself (which also contains the
+       glassmorphic .search-panel) because animating opacity on an ancestor
+       of a backdrop-filter element is a known Chromium/WebKit rendering
+       landmine: the panel's blur samples an intermediate, semi-transparent
+       composite mid-transition and renders a washed-out haze until it
+       settles. #drawflow has no backdrop-filter of its own, so it's safe. */
+    opacity: 0; transition: opacity 0.25s ease;
   }
+  #drawflow.visible { opacity: 1; }
   .parent-drawflow { background: transparent !important; }
   /* Every screen<->canvas conversion in this file (clientToCanvas, setZoom's
      pivot math, the connection-delete button's placement) assumes the
@@ -367,6 +417,14 @@
 
   .reel-frame { position: relative; width: 100%; aspect-ratio: 4 / 5; border-radius: var(--radius-md) var(--radius-md) 0 0; overflow: hidden; background: rgba(255,255,255,0.03); }
   .reel-frame img, .reel-frame video, .reel-frame iframe { width: 100%; height: 100%; object-fit: cover; display: block; border: none; }
+  /* Thumbnails are proxied through our own server (so Instagram's CDN
+     never sees the request directly), which adds a beat before each one
+     actually has pixels — fading each in as it finishes loading (instead
+     of a hard pop the instant the byte arrives) is what makes a canvas full
+     of them arriving at slightly different times read as "loading in
+     smoothly" rather than "flickering". */
+  .reel-frame img, img.thumb { opacity: 0; transition: opacity 0.3s ease; }
+  .reel-frame img.loaded, img.thumb.loaded { opacity: 1; }
   .reel-frame .play-btn {
     position: absolute; inset: 0; margin: auto; width: 38px; height: 38px; border-radius: 50%;
     background: rgba(0,0,0,0.5); backdrop-filter: blur(4px); border: none; color: #fff; display: flex; align-items: center; justify-content: center;
@@ -572,7 +630,8 @@
 
 <div id="spaces-view">
   <div class="spaces-header">
-    <h1>Spaces</h1>
+    <button class="icon-btn" id="spaces-settings-btn" title="Settings"></button>
+    <h1>Kompass</h1>
     <a class="back-link" href="/">&larr; back to base app</a>
   </div>
   <div class="create-hero">
@@ -708,43 +767,81 @@
 </div>
 
 <div class="modal-overlay" id="settings-modal">
-  <div class="modal" style="width:420px">
+  <div class="modal settings-modal-inner" style="width:660px">
     <div class="modal-header">
       <h3>Settings</h3>
       <button class="icon-btn tiny" id="settings-close"></button>
     </div>
-    <p class="modal-desc">Used for every Instagram scrape. Replace it here if the current key hits its usage limit or expires — takes effect immediately, no restart needed.</p>
-    <div class="field">
-      <label>Apify API Key</label>
-      <input type="text" id="apify-key-input" placeholder="apify_api_..." autocomplete="off" />
-    </div>
-    <p class="key-status" id="apify-key-status"></p>
-    <div class="modal-row">
-      <button class="secondary" id="apify-key-test-btn">Test Connection</button>
-      <button class="secondary" id="apify-key-remove-btn">Remove</button>
-    </div>
-    <button class="primary" id="apify-key-save-btn" style="width:100%">Save Key</button>
+    <div class="settings-body">
+      <div class="settings-nav">
+        <button class="settings-tab-btn active" data-tab="apify">Apify</button>
+        <button class="settings-tab-btn" data-tab="llm">Script Generator</button>
+        <button class="settings-tab-btn" data-tab="account">Account</button>
+      </div>
+      <div class="settings-content">
 
-    <div class="modal-section">
-      <h4>Script Generator (LLM)</h4>
-      <p class="modal-desc">Any OpenAI-compatible provider works. Defaults to <a href="https://console.groq.com/keys" target="_blank" rel="noopener">Groq's free tier</a> — sign up there and paste a key.</p>
-      <div class="field">
-        <label>Base URL</label>
-        <input type="text" id="llm-base-url-input" placeholder="https://api.groq.com/openai/v1" autocomplete="off" />
+        <div class="settings-pane" data-pane="apify">
+          <p class="modal-desc">Used for every Instagram scrape. Replace it here if the current key hits its usage limit or expires — takes effect immediately, no restart needed.</p>
+          <div class="field">
+            <label>Apify API Key</label>
+            <input type="text" id="apify-key-input" placeholder="apify_api_..." autocomplete="off" />
+          </div>
+          <p class="key-status" id="apify-key-status"></p>
+          <div class="modal-row">
+            <button class="secondary" id="apify-key-test-btn">Test Connection</button>
+            <button class="secondary" id="apify-key-remove-btn">Remove</button>
+          </div>
+          <button class="primary" id="apify-key-save-btn" style="width:100%">Save Key</button>
+        </div>
+
+        <div class="settings-pane" data-pane="llm" style="display:none">
+          <p class="modal-desc">Any OpenAI-compatible provider works. Defaults to <a href="https://console.groq.com/keys" target="_blank" rel="noopener">Groq's free tier</a> — sign up there and paste a key.</p>
+          <div class="field">
+            <label>Base URL</label>
+            <input type="text" id="llm-base-url-input" placeholder="https://api.groq.com/openai/v1" autocomplete="off" />
+          </div>
+          <div class="field">
+            <label>Model</label>
+            <input type="text" id="llm-model-input" placeholder="llama-3.3-70b-versatile" autocomplete="off" />
+          </div>
+          <div class="field">
+            <label>API Key</label>
+            <input type="text" id="llm-key-input" placeholder="gsk_..." autocomplete="off" />
+          </div>
+          <p class="key-status" id="llm-key-status"></p>
+          <div class="modal-row">
+            <button class="secondary" id="llm-key-remove-btn" style="flex:1">Remove Key</button>
+          </div>
+          <button class="primary" id="llm-key-save-btn" style="width:100%">Save</button>
+        </div>
+
+        <div class="settings-pane" data-pane="account" style="display:none">
+          <p class="modal-desc" id="account-email-desc"></p>
+          <div class="field">
+            <label>Display name</label>
+            <input type="text" id="account-name-input" placeholder="Your name" autocomplete="off" />
+          </div>
+          <button class="secondary" id="account-name-save-btn" style="width:100%">Save name</button>
+          <p class="key-status" id="account-name-status"></p>
+
+          <div class="field" style="margin-top:14px">
+            <label>New password</label>
+            <input type="password" id="account-new-password-input" placeholder="At least 8 characters" autocomplete="new-password" />
+          </div>
+          <div class="field" id="account-current-password-field">
+            <label>Current password</label>
+            <input type="password" id="account-current-password-input" placeholder="Confirm current password" autocomplete="current-password" />
+          </div>
+          <button class="secondary" id="account-password-save-btn" style="width:100%">Change password</button>
+          <p class="key-status" id="account-password-status"></p>
+
+          <div class="modal-row" style="margin-top:14px">
+            <button class="secondary" id="account-logout-btn" style="flex:1">Log out</button>
+            <button class="secondary danger" id="account-delete-btn" style="flex:1">Delete account</button>
+          </div>
+        </div>
+
       </div>
-      <div class="field">
-        <label>Model</label>
-        <input type="text" id="llm-model-input" placeholder="llama-3.3-70b-versatile" autocomplete="off" />
-      </div>
-      <div class="field">
-        <label>API Key</label>
-        <input type="text" id="llm-key-input" placeholder="gsk_..." autocomplete="off" />
-      </div>
-      <p class="key-status" id="llm-key-status"></p>
-      <div class="modal-row">
-        <button class="secondary" id="llm-key-remove-btn" style="flex:1">Remove Key</button>
-      </div>
-      <button class="primary" id="llm-key-save-btn" style="width:100%">Save</button>
     </div>
   </div>
 </div>
@@ -942,7 +1039,10 @@ async function openTranscriptModal(title, getContent) {
   }
 }
 $('transcript-modal-close').addEventListener('click', () => $('transcript-modal').classList.remove('open'));
-$('transcript-modal-copy').addEventListener('click', () => navigator.clipboard.writeText($('transcript-modal-body').textContent));
+$('transcript-modal-copy').addEventListener('click', () => {
+  navigator.clipboard.writeText($('transcript-modal-body').textContent);
+  flashSaved($('transcript-modal-copy'), 'Copied ✓', 'Copy');
+});
 
 let openDropdownCloser = null;
 function openDropdown(anchorEl, items) {
@@ -1090,7 +1190,7 @@ function buildReelFrame(v) {
   return `
     <div class="reel-frame">
       ${scoreBadge(v.outlierScore)}
-      <img class="thumb" src="${proxied(v.thumbnail)}" onerror="imgFallback(this)" draggable="false" />
+      <img class="thumb" src="${proxied(v.thumbnail)}" onload="this.classList.add('loaded')" onerror="imgFallback(this)" draggable="false" />
       <button class="play-btn">${icon('play', { size: 15 })}</button>
       <button class="icon-btn tiny menu-btn" title="More">${icon('more', { size: 12 })}</button>
     </div>
@@ -2174,12 +2274,15 @@ function initEditor() {
 
 async function openSpace(id) {
   state.spaceId = id;
+  // Fetch first, reveal canvas-view (and its dot-grid background) only once
+  // there's something to show — flipping the display before this fetch
+  // resolves is exactly what showed an empty dot-grid canvas for a beat
+  // before the space's nodes populated it.
+  const space = await fetchJSON(`/api/spaces/${id}`);
   $('spaces-view').style.display = 'none';
   $('canvas-view').style.display = 'flex';
-
-  const space = await fetchJSON(`/api/spaces/${id}`);
   $('space-name').textContent = space.name;
-  document.title = `${space.name} — Instagram Outlier`;
+  document.title = `${space.name} — Kompass`;
 
   initEditor();
   // Old spaces saved canvasState as the bare Drawflow export; new ones
@@ -2209,6 +2312,21 @@ async function openSpace(id) {
     if (graph) { organizeNodes(); recenterOnContent(); }
   }
   loadTrackedCategories();
+  // Everything above ran while #drawflow was already laid out (display:flex
+  // the whole time via .canvas-layout) but opacity:0 — only now, once
+  // nodes, camera position, and layout are all in place, does it actually
+  // fade into view, turning "reveal, then watch it get built" into one
+  // smooth appearance of a canvas that's already finished. The header and
+  // search panel were never part of this — they show up immediately.
+  // Double rAF: guarantees the browser has actually painted the opacity:0
+  // frame at least once before switching to opacity:1 — without this, a
+  // display:none->flex change and the opacity change landing in the same
+  // synchronous batch (with nothing ever rendered in between) is a known
+  // case where browsers skip the transition entirely and just jump
+  // straight to the end state.
+  requestAnimationFrame(() => requestAnimationFrame(() => {
+    $('drawflow').classList.add('visible');
+  }));
 }
 
 $('back-btn').addEventListener('click', () => { location.href = '/v1'; });
@@ -2216,7 +2334,7 @@ $('rename-space-btn').addEventListener('click', async () => {
   const name = await openNameModal({ title: 'Rename space', value: $('space-name').textContent, okLabel: 'Save' });
   if (!name) return;
   $('space-name').textContent = name;
-  document.title = `${name} — Instagram Outlier`;
+  document.title = `${name} — Kompass`;
   await fetchJSON(`/api/spaces/${state.spaceId}`, { method: 'PUT', body: { name } });
 });
 $('panel-toggle-btn').addEventListener('click', () => {
@@ -2225,12 +2343,28 @@ $('panel-toggle-btn').addEventListener('click', () => {
 
 // --- settings (Apify + LLM keys) — same modal/endpoints as the base app -
 
-$('settings-btn').addEventListener('click', () => {
+function openSettingsModal() {
   loadApifyKeyStatus();
   loadLlmSettings();
+  loadAccountSettings();
   $('settings-modal').classList.add('open');
-});
+}
+// Reachable from both the spaces list and a space's own canvas header —
+// signing out (or just checking who's signed in) shouldn't require opening
+// a space first.
+$('settings-btn').addEventListener('click', openSettingsModal);
+$('spaces-settings-btn').innerHTML = icon('settings', { size: 16 });
+$('spaces-settings-btn').addEventListener('click', openSettingsModal);
 $('settings-close').addEventListener('click', () => $('settings-modal').classList.remove('open'));
+
+document.querySelectorAll('.settings-tab-btn').forEach((btn) => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.settings-tab-btn').forEach((b) => b.classList.toggle('active', b === btn));
+    document.querySelectorAll('.settings-pane').forEach((pane) => {
+      pane.style.display = pane.dataset.pane === btn.dataset.tab ? 'block' : 'none';
+    });
+  });
+});
 
 function setKeyStatus(text, kind) {
   const el = $('apify-key-status');
@@ -2332,6 +2466,75 @@ $('llm-key-remove-btn').addEventListener('click', async () => {
   }
 });
 
+// --- settings: account (name, password, logout, delete) -------------------
+
+// Errors go in the status line right under whichever button was clicked
+// (not one shared line far below everything, which is what made "Name
+// saved." show up next to Log out instead of next to Save name). A
+// success needs no separate line at all — flashing the button's own text
+// (same pattern as Apify/LLM Save above) is the confirmation, and it's
+// impossible to end up visually detached from the action that caused it.
+function setFieldStatus(id, text, kind) {
+  const el = $(id);
+  el.textContent = text;
+  el.classList.toggle('error', kind === 'error');
+  el.classList.toggle('ok', kind === 'ok');
+}
+function flashSaved(btn, savedLabel, originalLabel) {
+  btn.textContent = savedLabel;
+  setTimeout(() => { btn.textContent = originalLabel; }, 1500);
+}
+async function loadAccountSettings() {
+  setFieldStatus('account-name-status', '', null);
+  setFieldStatus('account-password-status', '', null);
+  try {
+    const data = await fetchJSON('/api/account');
+    $('account-email-desc').textContent = `Signed in as ${data.email}${data.isAdmin ? ' (admin)' : ''}`;
+    $('account-name-input').value = data.name || '';
+    // A Google-only account has never set a password, so there's nothing
+    // to "confirm" yet — skip straight to picking a new one.
+    $('account-current-password-field').style.display = data.hasPassword ? 'block' : 'none';
+    // The admin account is protected from deletion server-side regardless;
+    // hiding the button too avoids a click that can only ever fail.
+    $('account-delete-btn').style.display = data.isAdmin ? 'none' : 'block';
+  } catch (err) {
+    setFieldStatus('account-name-status', err.message, 'error');
+  }
+}
+$('account-name-save-btn').addEventListener('click', async () => {
+  setFieldStatus('account-name-status', '', null);
+  try {
+    await fetchJSON('/api/account', { method: 'PATCH', body: { name: $('account-name-input').value.trim() } });
+    flashSaved($('account-name-save-btn'), 'Saved ✓', 'Save name');
+  } catch (err) {
+    setFieldStatus('account-name-status', err.message, 'error');
+  }
+});
+$('account-password-save-btn').addEventListener('click', async () => {
+  setFieldStatus('account-password-status', '', null);
+  const newPassword = $('account-new-password-input').value;
+  const currentPassword = $('account-current-password-input').value;
+  try {
+    await fetchJSON('/api/account/password', { method: 'POST', body: { currentPassword, newPassword } });
+    $('account-new-password-input').value = '';
+    $('account-current-password-input').value = '';
+    flashSaved($('account-password-save-btn'), 'Changed ✓', 'Change password');
+  } catch (err) {
+    setFieldStatus('account-password-status', err.message, 'error');
+  }
+});
+$('account-logout-btn').addEventListener('click', () => { location.href = '/auth/logout'; });
+$('account-delete-btn').addEventListener('click', async () => {
+  const ok = await openConfirmModal({ title: 'Delete your account?', desc: "This can't be undone.", okLabel: 'Delete account' });
+  if (!ok) return;
+  try {
+    await fetchJSON('/api/account', { method: 'DELETE' });
+    location.href = '/login.html';
+  } catch (err) {
+    setFieldStatus('account-password-status', err.message, 'error');
+  }
+});
+
 // --- creator search + track ------------------------------------------------
 
 function renderResults() {
@@ -2351,7 +2554,7 @@ function renderResults() {
       <input type="checkbox" class="checkbox check" ${checked ? 'checked' : ''} />
       <div class="reel-frame">
         ${scoreBadge(r.outlierScore)}
-        <img src="${proxied(r.thumbnail)}" onerror="imgFallback(this)" draggable="false" />
+        <img src="${proxied(r.thumbnail)}" onload="this.classList.add('loaded')" onerror="imgFallback(this)" draggable="false" />
         <button class="play-btn">${icon('play', { size: 13 })}</button>
         <button class="add-btn" title="Add to canvas">${icon('plus', { size: 13 })}</button>
       </div>
