@@ -58,6 +58,7 @@
     width: 34px; height: 34px; border-radius: var(--radius-sm); display: flex; align-items: center; justify-content: center;
   }
   .icon-btn:hover { color: var(--text); border-color: var(--border-hover); box-shadow: 0 0 0 1px var(--accent-soft), 0 6px 20px -6px rgba(76,141,255,0.35); }
+  .icon-btn.active { color: var(--text); border-color: var(--accent-border); background: var(--accent-soft); }
   .icon-btn.tiny { width: 26px; height: 26px; border-radius: 8px; }
   .icon { vertical-align: -3px; flex-shrink: 0; position: static !important; }
 
@@ -289,6 +290,10 @@
     box-shadow: 0 0 0 1px var(--accent-soft), 0 14px 34px rgba(0,0,0,0.5);
   }
   .drawflow .drawflow-node:hover { cursor: grab; }
+  /* The frame tool's crosshair needs to win even over a node's own
+     :hover cursor rule above — an inherited cursor from the ancestor
+     alone wouldn't, since that rule sets cursor directly on the node. */
+  #drawflow.frame-tool-active, #drawflow.frame-tool-active .drawflow-node:hover { cursor: crosshair; }
   .drawflow .drawflow-node .drawflow_content_node { width: 100%; }
   /* Muted white/gray at rest — blue is reserved for the brief flash right
      when a connection is made (see .just-connected), not a permanent color. */
@@ -381,6 +386,24 @@
   .group-node .filmstrip .mini .reel-frame { border-radius: var(--radius-sm); }
   .group-node .filmstrip .mini .reel-meta { padding: 8px 2px 0; }
   .group-node .count { font-size: 11px; color: var(--text-faint); padding: 0 14px 14px; }
+  /* An empty group drawn with the frame tool — a Figma-frame-style empty
+     drop zone sized to whatever rectangle was dragged out, sitting there
+     until a video lands in it and it flips over to the normal filmstrip. */
+  .group-node.empty .head { border-bottom: none; }
+  .filmstrip-empty {
+    margin: 0 12px 12px; border: 1px dashed var(--border-hover); border-radius: var(--radius-sm);
+    display: flex; align-items: center; justify-content: center;
+    color: var(--text-faint); font-size: 12px; min-width: 120px; min-height: 90px;
+  }
+
+  /* --- frame-draw tool ------------------------------------------------ */
+  /* The live rectangle dragged out while the frame tool is active — drawn
+     in raw screen pixels against #drawflow itself (not the zoomed/panned
+     precanvas), so no coordinate conversion is needed until mouseup. */
+  .frame-draft {
+    position: absolute; border: 1.5px dashed var(--accent); background: var(--accent-soft);
+    pointer-events: none; z-index: 15;
+  }
 
   .script-node { width: 260px; }
   .script-node .head { display: flex; align-items: center; gap: 8px; padding: 11px 14px; border-bottom: 1px solid var(--border); font-weight: 500; font-size: 13px; color: var(--text); }
@@ -527,6 +550,9 @@
         <button class="icon-btn tiny" id="zoom-out-btn" title="Zoom out"></button>
         <div class="zoom-pct" id="zoom-pct">100%</div>
         <button class="icon-btn tiny" id="zoom-in-btn" title="Zoom in"></button>
+        <div class="sep"></div>
+        <button class="icon-btn tiny active" id="cursor-tool-btn" title="Cursor"></button>
+        <button class="icon-btn tiny" id="frame-tool-btn" title="Draw a group frame"></button>
         <div class="sep"></div>
         <button class="icon-btn tiny" id="organize-btn" title="Arrange all nodes"></button>
         <button class="icon-btn tiny" id="recenter-btn" title="Recenter on your work"></button>
@@ -706,6 +732,8 @@ const ICONS = {
   shrink: '<polyline points="4 14 10 14 10 20"/><polyline points="20 10 14 10 14 4"/><line x1="14" y1="10" x2="21" y2="3"/><line x1="10" y1="14" x2="3" y2="21"/>',
   play: '<polygon points="6 3 20 12 6 21 6 3" fill="currentColor" stroke="none"/>',
   pause: '<rect x="6" y="4" width="4" height="16" fill="currentColor" stroke="none"/><rect x="14" y="4" width="4" height="16" fill="currentColor" stroke="none"/>',
+  cursor: '<path d="M5 3l14 6-6 2-2 6-6-14z" fill="currentColor" stroke="none"/>',
+  frame: '<path d="M8 3v18M16 3v18M3 8h18M3 16h18" stroke="currentColor" fill="none"/>',
 };
 function icon(name, { size = 16 } = {}) {
   return `<svg class="icon" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">${ICONS[name]}</svg>`;
@@ -717,6 +745,8 @@ $('settings-close').innerHTML = icon('close', { size: 12 });
 $('panel-toggle-btn').innerHTML = icon('panel', { size: 17 });
 $('zoom-in-btn').innerHTML = icon('zoomIn', { size: 14 });
 $('zoom-out-btn').innerHTML = icon('zoomOut', { size: 14 });
+$('cursor-tool-btn').innerHTML = icon('cursor', { size: 13 });
+$('frame-tool-btn').innerHTML = icon('frame', { size: 13 });
 $('organize-btn').innerHTML = icon('organize', { size: 13 });
 $('recenter-btn').innerHTML = icon('target', { size: 14 });
 $('add-chat-btn').innerHTML = icon('sparkle', { size: 13 }) + icon('plus', { size: 9 });
@@ -955,6 +985,7 @@ const state = {
   checkedHandles: new Set(), // which tracked creators contribute to the pool when "show all" is off
   poolLoadToken: 0, // bumped to invalidate an in-flight loadDefaultPool() when a search takes over
   pendingConnection: null,
+  tool: 'cursor', // 'cursor' | 'frame' — which bottom-toolbar tool is active on the canvas
 };
 
 // Fixed WORLD-SPACE half-extent the camera can roam — expressed in local
@@ -1091,17 +1122,26 @@ function buildMiniReelHtml(v, idx) {
 }
 
 function buildGroupNodeHtml(g) {
-  const items = g.videos.map((v, i) => buildMiniReelHtml(v, i)).join('');
+  // An empty group — created via the frame tool, nothing dropped into it
+  // yet — renders as a dashed drop-zone sized to whatever rectangle was
+  // drawn, instead of a zero-height filmstrip. The moment a video merges
+  // in (tryMergeIntoGroup) this same builder switches back to the normal
+  // aligned filmstrip, so "empty" is purely a rendering state, not a
+  // different kind of node.
+  const empty = !g.videos.length;
+  const body = empty
+    ? `<div class="filmstrip-empty" style="width:${g.frameW || 220}px;height:${g.frameH || 140}px">Drop a video here</div>`
+    : `<div class="filmstrip">${g.videos.map((v, i) => buildMiniReelHtml(v, i)).join('')}</div>`;
   return `
-    <div class="group-node node-card">
+    <div class="group-node node-card${empty ? ' empty' : ''}">
       <button class="icon-btn tiny node-remove" title="Remove">${icon('close', { size: 11 })}</button>
       <div class="head">
         <span class="name">${escapeHtml(g.name)}</span>
         <input class="rename-input" type="text" value="${escapeHtml(g.name)}" />
         <button class="icon-btn tiny rename-btn" title="Rename">${icon('edit', { size: 11 })}</button>
       </div>
-      <div class="filmstrip">${items}</div>
-      <div class="count">${g.videos.length} video${g.videos.length === 1 ? '' : 's'} — connect once to send them all</div>
+      ${body}
+      ${empty ? '' : `<div class="count">${g.videos.length} video${g.videos.length === 1 ? '' : 's'} — connect once to send them all</div>`}
     </div>
   `;
 }
@@ -1140,6 +1180,42 @@ function wireGroupNode(nodeId) {
   }
   inputEl.addEventListener('blur', commit);
   inputEl.addEventListener('keydown', (e) => { if (e.key === 'Enter') inputEl.blur(); });
+}
+
+// Dropping a standalone video-node onto an existing group's rendered
+// rect merges it straight into that group's filmstrip — same idea as
+// dragging a card into a Figma frame. Fires from the editor's
+// 'nodeMoved' event, so it's checked on every drag release, not just
+// drops from the sidebar. Overlap is decided by the *moved* node's
+// center landing inside the group's box, not just touching it.
+//
+// Hit-testing uses getBoundingClientRect() on both elements — real
+// screen-space rects — rather than converting data.pos_x/pos_y through
+// zoom/pan by hand. Drawflow's own drag code writes a node's rendered
+// position straight to the DOM on every mousemove tick; going through
+// the same rendered geometry sidesteps ever needing those two coordinate
+// spaces to agree with each other.
+function tryMergeIntoGroup(nodeId) {
+  const data = state.editor.drawflow.drawflow.Home.data;
+  const moved = data[nodeId];
+  if (!moved || moved.class !== 'video-node') return false;
+  const movedEl = document.getElementById(`node-${nodeId}`);
+  if (!movedEl) return false;
+  const mr = movedEl.getBoundingClientRect();
+  const cx = mr.left + mr.width / 2, cy = mr.top + mr.height / 2;
+  const groupId = findNodesByClass('group-node').find((id) => {
+    const gEl = document.getElementById(`node-${id}`);
+    if (!gEl) return false;
+    const gr = gEl.getBoundingClientRect();
+    return cx >= gr.left && cx <= gr.right && cy >= gr.top && cy <= gr.bottom;
+  });
+  if (groupId == null) return false;
+  const g = data[groupId];
+  state.editor.updateNodeDataFromId(groupId, { ...g.data, videos: [...g.data.videos, moved.data] });
+  state.editor.removeNodeId(`node-${nodeId}`);
+  rebuildNodeHtml(groupId);
+  state.editor.updateConnectionNodes(`node-${groupId}`);
+  return true;
 }
 
 function buildScriptNodeHtml(s) {
@@ -1382,6 +1458,34 @@ function flashConnectionDots({ output_id, input_id, output_class, input_class })
   });
 }
 
+// Rebuilds one node's inner HTML from its current data and re-wires it —
+// shared by the full-canvas refresh below and by anything that mutates a
+// node's data in place after creation (e.g. tryMergeIntoGroup adding a
+// video into a group's filmstrip).
+function rebuildNodeHtml(nodeId) {
+  const data = state.editor.drawflow.drawflow.Home.data;
+  const cls = data[nodeId]?.class;
+  const el = document.getElementById(`node-${nodeId}`);
+  if (!el) return;
+  const content = el.querySelector('.drawflow_content_node');
+  if (cls === 'chat-node') {
+    content.innerHTML = buildChatNodeHtml(data[nodeId].data);
+    // Chat nodes saved before chat-to-chat chaining was added have no
+    // output port — retrofit one so old spaces gain the ability too.
+    // (addNodeOutput takes the bare node id, not the "node-<id>" DOM id.)
+    if (!data[nodeId].outputs?.output_1) state.editor.addNodeOutput(nodeId);
+  }
+  else if (cls === 'video-node') content.innerHTML = buildVideoNodeHtml(data[nodeId].data);
+  else if (cls === 'group-node') content.innerHTML = buildGroupNodeHtml(data[nodeId].data);
+  else if (cls === 'script-node') content.innerHTML = buildScriptNodeHtml(data[nodeId].data);
+  else return;
+  delete el.dataset.wired;
+  if (cls === 'chat-node') wireChatNode(nodeId);
+  else if (cls === 'video-node') wireVideoNode(nodeId);
+  else if (cls === 'group-node') wireGroupNode(nodeId);
+  else if (cls === 'script-node') wireScriptNode(nodeId);
+}
+
 // Drawflow persists each node's *rendered* HTML string at save time, not
 // just its data — so a space saved before a template/CSS change reopens
 // with stale markup that our current styles don't target. Rebuilding every
@@ -1392,29 +1496,7 @@ function refreshAndWireAllNodes() {
   // One bad node's rebuild throwing shouldn't take every other node down
   // with it (Array#forEach doesn't catch), so each node is rebuilt inside
   // its own try/catch.
-  Object.keys(data).forEach((id) => { try {
-    const cls = data[id].class;
-    const nid = Number(id);
-    const el = document.getElementById(`node-${nid}`);
-    if (!el) return;
-    const content = el.querySelector('.drawflow_content_node');
-    if (cls === 'chat-node') {
-      content.innerHTML = buildChatNodeHtml(data[id].data);
-      // Chat nodes saved before chat-to-chat chaining was added have no
-      // output port — retrofit one so old spaces gain the ability too.
-      // (addNodeOutput takes the bare node id, not the "node-<id>" DOM id.)
-      if (!data[id].outputs?.output_1) state.editor.addNodeOutput(id);
-    }
-    else if (cls === 'video-node') content.innerHTML = buildVideoNodeHtml(data[id].data);
-    else if (cls === 'group-node') content.innerHTML = buildGroupNodeHtml(data[id].data);
-    else if (cls === 'script-node') content.innerHTML = buildScriptNodeHtml(data[id].data);
-    else return;
-    delete el.dataset.wired;
-    if (cls === 'chat-node') wireChatNode(nid);
-    else if (cls === 'video-node') wireVideoNode(nid);
-    else if (cls === 'group-node') wireGroupNode(nid);
-    else if (cls === 'script-node') wireScriptNode(nid);
-  } catch (err) { console.error(`Failed to rebuild node ${id}:`, err); } });
+  Object.keys(data).forEach((id) => { try { rebuildNodeHtml(Number(id)); } catch (err) { console.error(`Failed to rebuild node ${id}:`, err); } });
   // Rebuilding a node's content can change its rendered size (an old
   // save's markup vs. today's template), which leaves connection paths
   // drawn for the old geometry — still present, just no longer lined up
@@ -1688,6 +1770,59 @@ function initEditor() {
     document.addEventListener(type, (e) => e.preventDefault());
   });
 
+  // Frame tool (draw an empty group, Figma-frame style). Registered here,
+  // before Drawflow's own mousedown listener goes on this same container,
+  // for the same registration-order reason as the wheel listener above —
+  // stopImmediatePropagation only pre-empts Drawflow's node-drag/pan when
+  // the frame tool is actually active; otherwise this is a no-op and
+  // Drawflow's own mousedown handling runs exactly as before.
+  container.addEventListener('mousedown', (e) => {
+    if (state.tool !== 'frame' || e.button !== 0) return;
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    const rect = container.getBoundingClientRect();
+    const startX = e.clientX, startY = e.clientY;
+    const draft = document.createElement('div');
+    draft.className = 'frame-draft';
+    container.appendChild(draft);
+    const paint = (curX, curY) => {
+      draft.style.left = `${Math.min(startX, curX) - rect.left}px`;
+      draft.style.top = `${Math.min(startY, curY) - rect.top}px`;
+      draft.style.width = `${Math.abs(curX - startX)}px`;
+      draft.style.height = `${Math.abs(curY - startY)}px`;
+    };
+    paint(startX, startY);
+    const onMove = (ev) => paint(ev.clientX, ev.clientY);
+    const onUp = (ev) => {
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+      draft.remove();
+      const p1 = clientToCanvas(startX, startY);
+      const p2 = clientToCanvas(ev.clientX, ev.clientY);
+      // Floor at a sane minimum so a plain click-without-dragging still
+      // drops a usable frame instead of a zero-size one.
+      const frameW = Math.min(900, Math.max(220, Math.abs(p2.x - p1.x)));
+      const frameH = Math.min(600, Math.max(140, Math.abs(p2.y - p1.y)));
+      const gdata = { name: 'Group 1', videos: [], frameW, frameH };
+      const id = editor.addNode('group', 0, 1, Math.min(p1.x, p2.x), Math.min(p1.y, p2.y), 'group-node', gdata, buildGroupNodeHtml(gdata));
+      wireGroupNode(id);
+      setTool('cursor');
+    };
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  });
+
+  function setTool(tool) {
+    state.tool = tool;
+    $('cursor-tool-btn').classList.toggle('active', tool === 'cursor');
+    $('frame-tool-btn').classList.toggle('active', tool === 'frame');
+    container.classList.toggle('frame-tool-active', tool === 'frame');
+  }
+  $('cursor-tool-btn').addEventListener('click', () => setTool('cursor'));
+  $('frame-tool-btn').addEventListener('click', () => setTool('frame'));
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && state.tool === 'frame') setTool('cursor'); });
+  setTool('cursor');
+
   editor = new Drawflow(container);
   editor.reroute = true;
   editor.start();
@@ -1737,7 +1872,7 @@ function initEditor() {
 
   editor.on('nodeCreated', () => saveCanvasState());
   editor.on('nodeRemoved', () => saveCanvasState());
-  editor.on('nodeMoved', () => saveCanvasState());
+  editor.on('nodeMoved', (id) => { tryMergeIntoGroup(id); saveCanvasState(); });
   editor.on('connectionCreated', (conn) => { saveCanvasState(); refreshAllChatAttachments(); flashConnectionDots(conn); });
   editor.on('connectionRemoved', () => { saveCanvasState(); hideConnectionDelete(); refreshAllChatAttachments(); });
 
