@@ -713,7 +713,7 @@ app.post('/auth/login', async (req, res) => {
 
 app.get('/auth/logout', (req, res) => {
   res.setHeader('Set-Cookie', 'session=; Path=/; Max-Age=0');
-  res.redirect('/login.html');
+  res.redirect('/login');
 });
 
 app.get('/api/me', (req, res) => {
@@ -770,15 +770,18 @@ app.delete('/api/account', async (req, res) => {
 
 if (AUTH_ENABLED) {
   app.use((req, res, next) => {
-    if (req.path.startsWith('/auth/') || req.path === '/login.html' || req.path === '/api/me') return next();
+    if (req.path.startsWith('/auth/') || req.path === '/login' || req.path === '/api/me') return next();
     const email = verifySessionCookie(parseCookies(req).session);
     if (email) return next();
     if (req.path.startsWith('/api/')) return res.status(401).json({ error: 'Sign in required.' });
-    res.redirect('/login.html');
+    res.redirect('/login');
   });
 }
 
-app.use(express.static(path.join(__dirname, 'public')));
+// `extensions: ['html']` is what makes /login resolve to public/login.html
+// without a redirect or a dedicated route — a bare .html-less URL reads as
+// more polished than instagram-outlier.onrender.com/login.html.
+app.use(express.static(path.join(__dirname, 'public'), { extensions: ['html'] }));
 
 // v1: the new node-canvas UI, served as its own page so the base app at "/"
 // is untouched. Same backend, same database, different frontend.

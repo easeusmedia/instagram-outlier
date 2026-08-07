@@ -2529,7 +2529,7 @@ $('account-delete-btn').addEventListener('click', async () => {
   if (!ok) return;
   try {
     await fetchJSON('/api/account', { method: 'DELETE' });
-    location.href = '/login.html';
+    location.href = '/login';
   } catch (err) {
     setFieldStatus('account-password-status', err.message, 'error');
   }
