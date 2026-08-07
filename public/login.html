@@ -39,6 +39,8 @@
     outline: none; font-family: inherit;
   }
   input:focus { border-color: rgba(255,255,255,0.3); }
+  input.invalid { border-color: #f5a623; }
+  input.invalid:focus { border-color: #f5a623; box-shadow: 0 0 0 3px rgba(245,166,35,0.15); }
   button[type="submit"] {
     background: #EDF1F7; color: #05070a; border: none; border-radius: 9px;
     padding: 8px 12px; font-weight: 600; font-size: 13px; cursor: pointer; margin-top: 4px;
@@ -55,7 +57,7 @@
     <h1>Kompass</h1>
     <p id="subtitle">Sign in to continue</p>
 
-    <form id="authForm">
+    <form id="authForm" novalidate>
       <input type="email" id="email" placeholder="Email" autocomplete="email" required />
       <input type="password" id="password" placeholder="Password" autocomplete="current-password" required minlength="8" />
       <button type="submit" id="submitBtn">Sign in</button>
@@ -80,11 +82,25 @@
     const toggleText = document.getElementById('toggleText');
     const subtitle = document.getElementById('subtitle');
     const msg = document.getElementById('msg');
+    const emailInput = document.getElementById('email');
     const pwInput = document.getElementById('password');
 
     function showMsg(text) {
       msg.textContent = text;
       msg.style.display = text ? 'block' : 'none';
+    }
+
+    // Replaces the browser's own native "Please fill in this field" bubble
+    // (novalidate on the form suppresses it) — that bubble is unstyled OS
+    // chrome no CSS here can reach, so a real fix means owning the message
+    // ourselves instead of trying to reskin something unstyleable.
+    [emailInput, pwInput].forEach((input) => {
+      input.addEventListener('input', () => input.classList.remove('invalid'));
+    });
+    function markInvalid(input, text) {
+      input.classList.add('invalid');
+      input.focus();
+      showMsg(text);
     }
 
     toggleBtn.addEventListener('click', () => {
@@ -101,10 +117,17 @@
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
       showMsg('');
+      emailInput.classList.remove('invalid');
+      pwInput.classList.remove('invalid');
+      const email = emailInput.value.trim();
+      const password = pwInput.value;
+      if (!email) return markInvalid(emailInput, 'Enter your email.');
+      if (!password) return markInvalid(pwInput, 'Enter your password.');
+      if (mode === 'signup' && password.length < 8) {
+        return markInvalid(pwInput, 'Password must be at least 8 characters.');
+      }
       submitBtn.disabled = true;
       try {
-        const email = document.getElementById('email').value.trim();
-        const password = pwInput.value;
         const res = await fetch(mode === 'signup' ? '/auth/signup' : '/auth/login', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
