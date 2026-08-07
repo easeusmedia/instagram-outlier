@@ -22,7 +22,7 @@
     text-align: center;
   }
   h1 { font-size: 18px; margin: 0 0 6px; }
-  p { color: #8A93A3; font-size: 13px; margin: 0 0 24px; }
+  p { color: #8A93A3; font-size: 13px; margin: 0 0 20px; }
   a.google-btn {
     display: flex; align-items: center; justify-content: center; gap: 10px;
     background: #fff; color: #1f1f1f;
@@ -30,22 +30,98 @@
     text-decoration: none; font-weight: 600; font-size: 14px;
   }
   a.google-btn:hover { background: #f1f1f1; }
-  #denied { display: none; color: #ff5c5c; font-size: 12px; margin-top: 16px; }
+  .divider { display: flex; align-items: center; gap: 10px; margin: 18px 0; color: #5B6472; font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; }
+  .divider::before, .divider::after { content: ''; flex: 1; height: 1px; background: rgba(255,255,255,0.09); }
+  form { display: flex; flex-direction: column; gap: 10px; text-align: left; }
+  input {
+    background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 9px; padding: 10px 12px; color: #EDF1F7; font-size: 13px;
+    outline: none; font-family: inherit;
+  }
+  input:focus { border-color: rgba(255,255,255,0.3); }
+  button[type="submit"] {
+    background: #EDF1F7; color: #05070a; border: none; border-radius: 9px;
+    padding: 11px 16px; font-weight: 600; font-size: 14px; cursor: pointer; margin-top: 4px;
+  }
+  button[type="submit"]:hover { background: #cfd6e0; }
+  button[type="submit"]:disabled { opacity: 0.6; cursor: default; }
+  .toggle { margin-top: 14px; font-size: 12px; color: #8A93A3; }
+  .toggle button { background: none; border: none; color: #9db4ff; cursor: pointer; font-size: 12px; padding: 0; text-decoration: underline; }
+  #msg { display: none; color: #ff5c5c; font-size: 12px; margin-top: 12px; }
 </style>
 </head>
 <body>
   <div class="card">
     <h1>Instagram Outlier</h1>
-    <p>Sign in to continue</p>
+    <p id="subtitle">Sign in to continue</p>
+
+    <form id="authForm">
+      <input type="email" id="email" placeholder="Email" autocomplete="email" required />
+      <input type="password" id="password" placeholder="Password" autocomplete="current-password" required minlength="8" />
+      <button type="submit" id="submitBtn">Sign in</button>
+    </form>
+    <div class="toggle">
+      <span id="toggleText">Don't have an account?</span>
+      <button type="button" id="toggleMode">Sign up</button>
+    </div>
+
+    <div class="divider">or</div>
     <a class="google-btn" href="/auth/google">
       <svg width="18" height="18" viewBox="0 0 18 18"><path fill="#4285F4" d="M17.64 9.2c0-.64-.06-1.25-.16-1.84H9v3.48h4.84a4.14 4.14 0 01-1.8 2.71v2.26h2.9c1.7-1.57 2.7-3.88 2.7-6.61z"/><path fill="#34A853" d="M9 18c2.43 0 4.47-.8 5.96-2.18l-2.9-2.26c-.8.54-1.84.86-3.06.86-2.35 0-4.34-1.59-5.05-3.72H.94v2.33A9 9 0 009 18z"/><path fill="#FBBC05" d="M3.95 10.7A5.4 5.4 0 013.68 9c0-.59.1-1.17.27-1.7V4.97H.94A9 9 0 000 9c0 1.45.35 2.83.94 4.03l3.01-2.33z"/><path fill="#EA4335" d="M9 3.58c1.32 0 2.5.45 3.44 1.35l2.58-2.58C13.46.89 11.43 0 9 0A9 9 0 00.94 4.97l3.01 2.33C4.66 5.17 6.65 3.58 9 3.58z"/></svg>
       Continue with Google
     </a>
-    <div id="denied">That Google account isn't authorized for this app.</div>
+    <div id="msg"></div>
   </div>
   <script>
+    let mode = 'login';
+    const form = document.getElementById('authForm');
+    const submitBtn = document.getElementById('submitBtn');
+    const toggleBtn = document.getElementById('toggleMode');
+    const toggleText = document.getElementById('toggleText');
+    const subtitle = document.getElementById('subtitle');
+    const msg = document.getElementById('msg');
+    const pwInput = document.getElementById('password');
+
+    function showMsg(text) {
+      msg.textContent = text;
+      msg.style.display = text ? 'block' : 'none';
+    }
+
+    toggleBtn.addEventListener('click', () => {
+      mode = mode === 'login' ? 'signup' : 'login';
+      const isSignup = mode === 'signup';
+      submitBtn.textContent = isSignup ? 'Create account' : 'Sign in';
+      subtitle.textContent = isSignup ? 'Create an account to continue' : 'Sign in to continue';
+      toggleText.textContent = isSignup ? 'Already have an account?' : "Don't have an account?";
+      toggleBtn.textContent = isSignup ? 'Sign in' : 'Sign up';
+      pwInput.autocomplete = isSignup ? 'new-password' : 'current-password';
+      showMsg('');
+    });
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      showMsg('');
+      submitBtn.disabled = true;
+      try {
+        const email = document.getElementById('email').value.trim();
+        const password = pwInput.value;
+        const res = await fetch(mode === 'signup' ? '/auth/signup' : '/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, password }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Something went wrong.');
+        location.href = '/';
+      } catch (err) {
+        showMsg(err.message);
+      } finally {
+        submitBtn.disabled = false;
+      }
+    });
+
     if (new URLSearchParams(location.search).get('denied')) {
-      document.getElementById('denied').style.display = 'block';
+      showMsg("That Google account isn't authorized for this app.");
     }
   </script>
 </body>

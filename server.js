@@ -1,7 +1,7 @@
 import 'dotenv/config';
 import express from 'express';
-import { createClient } from '@libsql/client';
-import fs from 'node:fs';
+import pg from 'pg';
+import disposableDomains from 'disposable-email-domains/index.json' with { type: 'json' };
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import crypto from 'node:crypto';
@@ -22,11 +22,11 @@ const PORT = process.env.PORT || 3000;
 const REFRESH_COOLDOWN_MS = 7 * 24 * 60 * 60 * 1000; // once a week
 // ------------------------------------------------------------------------
 
-// --- Google OAuth login gate -------------------------------------------
-// Only turns on when GOOGLE_CLIENT_ID/SECRET are set, so local dev stays
-// zero-setup. This is a single-tenant gate (allow/deny), not a multi-user
-// account system — the app has no per-user data model, so anything past
-// "is this a known Google account" would be unused complexity.
+// --- login: email/password accounts + optional Google OAuth ------------
+// Email/password is now the primary account system (users table). Google
+// OAuth stays available side-by-side when GOOGLE_CLIENT_ID/SECRET are set —
+// either path sets the same signed `session` cookie, so everything past
+// login (the auth gate below, /api/me) doesn't care which one was used.
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || '';
 const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET || '';
 const ALLOWED_EMAILS = (process.env.ALLOWED_EMAILS || '')
@@ -34,8 +34,27 @@ const ALLOWED_EMAILS = (process.env.ALLOWED_EMAILS || '')
 // ponytail: regenerated on every boot if unset, which logs everyone out on
 // deploy/restart. Set SESSION_SECRET in the environment to persist sessions.
 const SESSION_SECRET = process.env.SESSION_SECRET || crypto.randomBytes(32).toString('hex');
-const AUTH_ENABLED = !!(GOOGLE_CLIENT_ID && GOOGLE_CLIENT_SECRET);
+const AUTH_ENABLED = true;
 const SESSION_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
+const DISPOSABLE_DOMAINS = new Set(disposableDomains);
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+function isDisposableEmail(email) {
+  return DISPOSABLE_DOMAINS.has((email.split('@')[1] || '').toLowerCase());
+}
+// scrypt (Node stdlib) over a random per-password salt — no bcrypt
+// dependency needed for this.
+function hashPassword(password) {
+  const salt = crypto.randomBytes(16).toString('hex');
+  return `${salt}:${crypto.scryptSync(password, salt, 64).toString('hex')}`;
+}
+function verifyPassword(password, stored) {
+  const [salt, hash] = (stored || '').split(':');
+  if (!salt || !hash) return false;
+  const candidate = crypto.scryptSync(password, salt, 64);
+  const target = Buffer.from(hash, 'hex');
+  return candidate.length === target.length && crypto.timingSafeEqual(candidate, target);
+}
 
 function parseCookies(req) {
   const header = req.headers.cookie || '';
@@ -72,53 +91,88 @@ function oauthRedirectUri(req) {
 }
 // ------------------------------------------------------------------------
 
-// Turso (libSQL) when TURSO_DATABASE_URL is set — this is what makes the app
-// deployable on Render/Vercel, since neither gives you a persistent local
-// disk to keep a SQLite file on. With no env var set, falls back to a local
-// SQLite file for zero-setup local dev (same client, same SQL, just a
-// different URL scheme).
-const DB_PATH = path.join(__dirname, 'data', 'store.db');
-if (!process.env.TURSO_DATABASE_URL) fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
+// Postgres (e.g. Neon). DATABASE_URL is required — no more local-SQLite
+// fallback now that the app has real user accounts and pgvector search.
+if (!process.env.DATABASE_URL) {
+  console.error('Missing DATABASE_URL. Set it to a Postgres connection string (e.g. from neon.tech) in .env.');
+  process.exit(1);
+}
 
-const db = createClient({
-  url: process.env.TURSO_DATABASE_URL || `file:${DB_PATH}`,
-  authToken: process.env.TURSO_AUTH_TOKEN,
+const { Pool } = pg;
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  // Neon (and most hosted Postgres) terminate TLS with a cert chain `pg`
+  // doesn't validate by default; a plain local Postgres has no TLS at all.
+  ssl: /localhost|127\.0\.0\.1/.test(process.env.DATABASE_URL) ? false : { rejectUnauthorized: false },
 });
 
+// Every call site in this file was written for SQLite's `?` placeholders —
+// converting to Postgres's `$1,$2,...` here, in one place, means none of
+// them had to change.
+function toPgSql(sql) {
+  let i = 0;
+  return sql.replace(/\?/g, () => `$${++i}`);
+}
+
 async function run(sql, args = []) {
-  return db.execute({ sql, args });
+  return pool.query(toPgSql(sql), args);
 }
 
 async function queryOne(sql, args = []) {
-  const result = await db.execute({ sql, args });
+  const result = await pool.query(toPgSql(sql), args);
   return result.rows[0] || null;
 }
 
 async function queryAll(sql, args = []) {
-  const result = await db.execute({ sql, args });
+  const result = await pool.query(toPgSql(sql), args);
   return result.rows;
 }
 
-await run(`CREATE TABLE IF NOT EXISTS creators (handle TEXT PRIMARY KEY, profile JSON)`);
-await run(`CREATE TABLE IF NOT EXISTS reels (handle TEXT PRIMARY KEY, data JSON)`);
+// JSON-typed columns stay TEXT: every call site already does its own
+// JSON.parse/stringify, and Postgres's `pg` driver auto-parses a real `json`
+// column into an object before that code ever sees it — TEXT sidesteps that
+// mismatch without touching any of those call sites.
+await run(`CREATE EXTENSION IF NOT EXISTS vector`);
+await run(`CREATE TABLE IF NOT EXISTS creators (handle TEXT PRIMARY KEY, profile TEXT)`);
+await run(`CREATE TABLE IF NOT EXISTS reels (handle TEXT PRIMARY KEY, data TEXT)`);
 await run(`CREATE TABLE IF NOT EXISTS bookmarks (handle TEXT PRIMARY KEY, added_at TEXT, category_id INTEGER)`);
 // A creator can belong to more than one category (v1's manage-categories
 // modal needs this); bookmarks.category_id above is kept as-is and still
 // drives the base app's single-category drag-and-drop UI unchanged — it's
 // always kept equal to this table's lowest category_id per handle.
 await run(`CREATE TABLE IF NOT EXISTS bookmark_categories (handle TEXT NOT NULL, category_id INTEGER NOT NULL, PRIMARY KEY (handle, category_id))`);
-await run(`INSERT OR IGNORE INTO bookmark_categories (handle, category_id) SELECT handle, category_id FROM bookmarks WHERE category_id IS NOT NULL`);
-await run(`CREATE TABLE IF NOT EXISTS transcripts (shortcode TEXT PRIMARY KEY, data JSON)`);
+await run(`INSERT INTO bookmark_categories (handle, category_id) SELECT handle, category_id FROM bookmarks WHERE category_id IS NOT NULL ON CONFLICT DO NOTHING`);
+await run(`CREATE TABLE IF NOT EXISTS transcripts (shortcode TEXT PRIMARY KEY, data TEXT)`);
 await run(`CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT)`);
-await run(`CREATE TABLE IF NOT EXISTS creator_categories (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL)`);
-await run(`CREATE TABLE IF NOT EXISTS video_categories (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL)`);
+await run(`CREATE TABLE IF NOT EXISTS creator_categories (id SERIAL PRIMARY KEY, name TEXT NOT NULL)`);
+await run(`CREATE TABLE IF NOT EXISTS video_categories (id SERIAL PRIMARY KEY, name TEXT NOT NULL)`);
 await run(`CREATE TABLE IF NOT EXISTS video_tags (shortcode TEXT PRIMARY KEY, category_id INTEGER)`);
 await run(`CREATE TABLE IF NOT EXISTS saved_videos (shortcode TEXT PRIMARY KEY, saved_at TEXT)`);
-await run(`CREATE TABLE IF NOT EXISTS scripts (id INTEGER PRIMARY KEY AUTOINCREMENT, shortcode TEXT, handle TEXT, content TEXT, created_at TEXT)`);
+// embedding: OpenAI text-embedding-3-small (1536 dims) over each script's
+// content, filled in lazily by embedText() — see the pgvector search block
+// near the bottom of the file. NULL until OPENAI_API_KEY is set.
+await run(`CREATE TABLE IF NOT EXISTS scripts (id SERIAL PRIMARY KEY, shortcode TEXT, handle TEXT, content TEXT, created_at TEXT, embedding vector(1536))`);
 await run(`CREATE TABLE IF NOT EXISTS creator_checks (handle TEXT PRIMARY KEY, checked_at TEXT)`);
 // v1 canvas: a "space" is one named Drawflow board. canvas_state is
 // whatever editor.export() produced last, saved back verbatim.
-await run(`CREATE TABLE IF NOT EXISTS spaces (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, canvas_state JSON, created_at TEXT)`);
+await run(`CREATE TABLE IF NOT EXISTS spaces (id SERIAL PRIMARY KEY, name TEXT NOT NULL, canvas_state TEXT, created_at TEXT)`);
+await run(`CREATE TABLE IF NOT EXISTS users (id SERIAL PRIMARY KEY, email TEXT UNIQUE NOT NULL, password_hash TEXT NOT NULL, is_admin BOOLEAN NOT NULL DEFAULT FALSE, created_at TEXT NOT NULL)`);
+
+// Seeds one admin account from env vars (never hardcode real credentials in
+// source — this repo is version-controlled). Set ADMIN_EMAIL/ADMIN_PASSWORD
+// in .env locally and in Render's dashboard; no-ops if either is unset or
+// the account already exists.
+async function seedAdminUser() {
+  const email = (process.env.ADMIN_EMAIL || '').trim().toLowerCase();
+  const password = process.env.ADMIN_PASSWORD || '';
+  if (!email || !password) return;
+  if (await queryOne('SELECT id FROM users WHERE email = ?', [email])) return;
+  await run('INSERT INTO users (email, password_hash, is_admin, created_at) VALUES (?, ?, ?, ?)', [
+    email, hashPassword(password), true, new Date().toISOString(),
+  ]);
+  console.log(`Seeded admin user: ${email}`);
+}
+await seedAdminUser();
 
 // Script Generator's LLM call is a plain OpenAI-compatible chat completion,
 // so any provider with that API shape works by just changing base URL/model.
@@ -213,7 +267,7 @@ async function syncPrimaryCategoryColumn(handle) {
 // UI calls, so it keeps that replace-not-add semantics.
 async function setBookmarkCategory(handle, categoryId) {
   await run('DELETE FROM bookmark_categories WHERE handle = ?', [handle]);
-  if (categoryId != null) await run('INSERT OR IGNORE INTO bookmark_categories (handle, category_id) VALUES (?, ?)', [handle, categoryId]);
+  if (categoryId != null) await run('INSERT INTO bookmark_categories (handle, category_id) VALUES (?, ?) ON CONFLICT DO NOTHING', [handle, categoryId]);
   await syncPrimaryCategoryColumn(handle);
 }
 
@@ -223,7 +277,7 @@ async function setBookmarkCategory(handle, categoryId) {
 async function setBookmarkCategories(handle, categoryIds) {
   await run('DELETE FROM bookmark_categories WHERE handle = ?', [handle]);
   for (const id of categoryIds) {
-    await run('INSERT OR IGNORE INTO bookmark_categories (handle, category_id) VALUES (?, ?)', [handle, id]);
+    await run('INSERT INTO bookmark_categories (handle, category_id) VALUES (?, ?) ON CONFLICT DO NOTHING', [handle, id]);
   }
   await syncPrimaryCategoryColumn(handle);
 }
@@ -295,19 +349,54 @@ async function setVideoSaved(shortcode, saved) {
   }
 }
 
+// Excludes `embedding` deliberately — it's a 1536-float array, no caller of
+// listScripts needs it, and shipping it in every response would bloat the
+// payload for nothing.
 async function listScripts() {
-  return queryAll('SELECT * FROM scripts ORDER BY created_at DESC');
+  return queryAll('SELECT id, shortcode, handle, content, created_at FROM scripts ORDER BY created_at DESC');
 }
 
 async function addScript(shortcode, handle, content) {
   const existing = await queryOne('SELECT id FROM scripts WHERE shortcode = ?', [shortcode]);
   if (!existing) {
-    await run(
-      'INSERT INTO scripts (shortcode, handle, content, created_at) VALUES (?, ?, ?, ?)',
+    const row = await queryOne(
+      'INSERT INTO scripts (shortcode, handle, content, created_at) VALUES (?, ?, ?, ?) RETURNING id',
       [shortcode, handle, content, new Date().toISOString()]
     );
+    // Fire-and-forget: embedding is for search, never something a script-add
+    // request should wait on. No-ops silently if OPENAI_API_KEY isn't set.
+    embedText(content).then((vec) => {
+      if (vec) return run('UPDATE scripts SET embedding = ? WHERE id = ?', [vecLiteral(vec), row.id]);
+    }).catch((err) => console.error('Embedding failed for script', row.id, err.message));
   }
   return listScripts();
+}
+
+// --- pgvector semantic search over saved scripts -----------------------
+// Groq (the default Script Genie LLM) has no embeddings endpoint, so this
+// uses OpenAI directly via a plain env var rather than the Settings-modal
+// LLM key. Every call site is written to no-op (return null) when unset —
+// scripts just stay unembedded and /api/search reports why, instead of the
+// app crashing for anyone who hasn't wired this up.
+const EMBEDDING_MODEL = 'text-embedding-3-small'; // 1536 dims, matches the scripts.embedding column
+
+async function embedText(text) {
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey || !text) return null;
+  const resp = await fetch('https://api.openai.com/v1/embeddings', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
+    body: JSON.stringify({ model: EMBEDDING_MODEL, input: text.slice(0, 8000) }),
+  });
+  if (!resp.ok) return null;
+  const data = await resp.json();
+  return data?.data?.[0]?.embedding || null;
+}
+// pgvector reads its column type off the target column, so a plain
+// bracketed-number-list string (its native text input format) is all a
+// query parameter needs to be — no special pg type wiring required.
+function vecLiteral(vec) {
+  return `[${vec.join(',')}]`;
 }
 
 async function getLlmSettings() {
@@ -575,6 +664,35 @@ app.get('/auth/google/callback', async (req, res) => {
   } catch (err) {
     res.status(500).send(`Login failed: ${err.message}`);
   }
+});
+
+function setSessionCookie(res, email) {
+  res.setHeader('Set-Cookie', `session=${makeSessionCookie(email)}; HttpOnly; Path=/; Max-Age=${SESSION_MAX_AGE_MS / 1000}; SameSite=Lax`);
+}
+
+app.post('/auth/signup', async (req, res) => {
+  const email = ((req.body && req.body.email) || '').trim().toLowerCase();
+  const password = (req.body && req.body.password) || '';
+  if (!EMAIL_RE.test(email)) return res.status(400).json({ error: 'Enter a valid email address.' });
+  if (isDisposableEmail(email)) return res.status(400).json({ error: 'Temporary/disposable email addresses are not allowed — use a permanent one.' });
+  if (password.length < 8) return res.status(400).json({ error: 'Password must be at least 8 characters.' });
+  if (await queryOne('SELECT id FROM users WHERE email = ?', [email])) {
+    return res.status(409).json({ error: 'An account with this email already exists.' });
+  }
+  await run('INSERT INTO users (email, password_hash, created_at) VALUES (?, ?, ?)', [email, hashPassword(password), new Date().toISOString()]);
+  setSessionCookie(res, email);
+  res.json({ ok: true, email });
+});
+
+app.post('/auth/login', async (req, res) => {
+  const email = ((req.body && req.body.email) || '').trim().toLowerCase();
+  const password = (req.body && req.body.password) || '';
+  const user = await queryOne('SELECT password_hash FROM users WHERE email = ?', [email]);
+  if (!user || !verifyPassword(password, user.password_hash)) {
+    return res.status(401).json({ error: 'Incorrect email or password.' });
+  }
+  setSessionCookie(res, email);
+  res.json({ ok: true, email });
 });
 
 app.get('/auth/logout', (req, res) => {
@@ -895,13 +1013,36 @@ app.post('/api/scripts', async (req, res) => {
 
 app.patch('/api/scripts/:id', async (req, res) => {
   const content = (req.body && req.body.content) || '';
-  await run('UPDATE scripts SET content = ? WHERE id = ?', [content, Number(req.params.id)]);
+  const id = Number(req.params.id);
+  await run('UPDATE scripts SET content = ? WHERE id = ?', [content, id]);
+  embedText(content).then((vec) => {
+    if (vec) return run('UPDATE scripts SET embedding = ? WHERE id = ?', [vecLiteral(vec), id]);
+  }).catch((err) => console.error('Embedding failed for script', id, err.message));
   res.json({ scripts: await listScripts() });
 });
 
 app.delete('/api/scripts/:id', async (req, res) => {
   await run('DELETE FROM scripts WHERE id = ?', [Number(req.params.id)]);
   res.json({ scripts: await listScripts() });
+});
+
+// Semantic search over saved scripts (pgvector cosine distance). Needs
+// OPENAI_API_KEY set — see embedText above.
+app.get('/api/search', async (req, res) => {
+  const q = (req.query.q || '').trim();
+  if (!q) return res.status(400).json({ error: 'q is required.' });
+  if (!process.env.OPENAI_API_KEY) {
+    return res.status(400).json({ error: 'Semantic search needs OPENAI_API_KEY set on the server.' });
+  }
+  const vec = await embedText(q);
+  if (!vec) return res.status(502).json({ error: 'Could not reach OpenAI to embed the search query.' });
+  const literal = vecLiteral(vec);
+  const results = await queryAll(
+    `SELECT id, shortcode, handle, content, created_at, 1 - (embedding <=> ?) AS similarity
+     FROM scripts WHERE embedding IS NOT NULL ORDER BY embedding <=> ? LIMIT 20`,
+    [literal, literal]
+  );
+  res.json({ results });
 });
 
 // --- v1 canvas: spaces ---------------------------------------------------
@@ -914,12 +1055,12 @@ app.get('/api/spaces', async (req, res) => {
 app.post('/api/spaces', async (req, res) => {
   const name = ((req.body && req.body.name) || '').trim();
   if (!name) return res.status(400).json({ error: 'Name is required.' });
-  const result = await run('INSERT INTO spaces (name, canvas_state, created_at) VALUES (?, ?, ?)', [
+  const row = await queryOne('INSERT INTO spaces (name, canvas_state, created_at) VALUES (?, ?, ?) RETURNING id', [
     name,
     null,
     new Date().toISOString(),
   ]);
-  res.json({ id: Number(result.lastInsertRowid) });
+  res.json({ id: row.id });
 });
 
 app.get('/api/spaces/:id', async (req, res) => {
@@ -1096,6 +1237,21 @@ async function migrateViewsMaxFix() {
   await run("INSERT INTO settings (key, value) VALUES ('viewsMigrationV2', '1')");
 }
 await migrateViewsMaxFix();
+
+// Not gated by a settings flag like the migrations above: the WHERE clause
+// itself is the guard (only ever touches rows still missing an embedding),
+// so it's already a no-op once caught up — cheap enough to just run on
+// every boot. Also the only way pre-existing scripts get embedded at all
+// if OPENAI_API_KEY is added after they were saved.
+async function backfillScriptEmbeddings() {
+  if (!process.env.OPENAI_API_KEY) return;
+  const rows = await queryAll('SELECT id, content FROM scripts WHERE embedding IS NULL');
+  for (const row of rows) {
+    const vec = await embedText(row.content);
+    if (vec) await run('UPDATE scripts SET embedding = ? WHERE id = ?', [vecLiteral(vec), row.id]);
+  }
+}
+await backfillScriptEmbeddings();
 
 app.listen(PORT, () => {
   console.log(`Instagram Outlier running at http://localhost:${PORT}`);

@@ -8,7 +8,13 @@ services:
     envVars:
       - key: APIFY_TOKEN
         sync: false
-      - key: TURSO_DATABASE_URL
+      - key: DATABASE_URL
         sync: false
-      - key: TURSO_AUTH_TOKEN
+      - key: ADMIN_EMAIL
+        sync: false
+      - key: ADMIN_PASSWORD
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: SESSION_SECRET
         sync: false

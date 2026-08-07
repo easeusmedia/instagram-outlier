@@ -35,37 +35,36 @@ Open [http://localhost:3000](http://localhost:3000).
 
 ## Storage
 
-Everything is stored in SQLite via [`@libsql/client`](https://github.com/tursodatabase/libsql-client-ts):
+Everything is stored in Postgres via [`pg`](https://node-postgres.com/) — same database for local dev and production, pointed at by one `DATABASE_URL` env var. [Neon](https://neon.tech) has a free tier with no inactivity expiry and first-class [pgvector](https://neon.tech/docs/extensions/pgvector) support (used for semantic script search below) — create a project there, copy its connection string, and paste it into `.env` (or your host's environment variable settings) as `DATABASE_URL`.
 
-- **Local dev**: with no `TURSO_DATABASE_URL` set, it uses a local file at `data/store.db`. Delete that file to reset all data.
-- **Hosted (Render, Vercel, etc.)**: set `TURSO_DATABASE_URL` and `TURSO_AUTH_TOKEN` in your environment to point at a [Turso](https://turso.tech) database instead. Same code, same SQL, no native build step, no server to run yourself — this is what makes the app deployable on platforms with no persistent local disk (Vercel's serverless functions in particular).
+The `vector` extension is created automatically on boot (`CREATE EXTENSION IF NOT EXISTS vector`).
 
-To create a Turso database:
+> Migrating off the old Turso/SQLite setup? `scripts/migrate-to-postgres.mjs` copies every table across once `DATABASE_URL` is set and the server's been started at least once (to create the tables).
 
-```bash
-npm install -g @tursodatabase/cli   # or: curl -sSfL https://get.tur.so/install.sh | bash
-turso auth login
-turso db create instagram-outlier
-turso db show instagram-outlier --url        # → TURSO_DATABASE_URL
-turso db tokens create instagram-outlier     # → TURSO_AUTH_TOKEN
-```
+## Accounts & login
 
-Paste both into `.env` (or your host's environment variable settings) alongside `APIFY_TOKEN`.
+Sign-in is always on: email/password accounts (`/auth/signup`, `/auth/login`) are the primary system, stored in the `users` table with scrypt-hashed passwords (Node's built-in `crypto`, no extra dependency). Signup rejects disposable/temporary-mail domains via the [`disposable-email-domains`](https://github.com/disposable-email-domains/disposable-email-domains) list.
 
-> Note: switching from the local file to Turso starts with an empty database — bookmarks/cache built up locally don't carry over automatically.
-
-## Login gate (optional)
-
-The app has no login by default (fine for local use). To put a "Sign in with Google" gate in front of a public deployment — so random visitors can't burn your Apify credits — set these env vars on your host:
+Optional extras, set as env vars on your host:
 
 ```bash
+ADMIN_EMAIL=            # seeds one admin account on boot (no-op once it exists)
+ADMIN_PASSWORD=
+
+OPENAI_API_KEY=         # enables semantic script search (pgvector) — see below
+
+# Also allow "Sign in with Google" alongside email/password:
 GOOGLE_CLIENT_ID=      # from a Google Cloud OAuth client (Web application type)
 GOOGLE_CLIENT_SECRET=
 ALLOWED_EMAILS=you@gmail.com,teammate@gmail.com   # comma-separated allowlist; leave blank to allow any Google account
-SESSION_SECRET=        # any random string; keeps you logged in across restarts
+SESSION_SECRET=        # any random string; keeps everyone logged in across restarts
 ```
 
-In the Google Cloud Console, add `https://your-app-url/auth/google/callback` as an authorized redirect URI on the OAuth client. With no `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET` set, the app behaves exactly as before — no login screen, nothing changes. This is a single allow/deny gate, not multi-user accounts — everyone who's allowed in shares the same data, same as today.
+In the Google Cloud Console, add `https://your-app-url/auth/google/callback` as an authorized redirect URI on the OAuth client. Every user shares the same bookmarks/scripts/spaces data today — accounts gate *access*, not per-user data (that's a bigger change, not built yet).
+
+## Semantic script search (pgvector)
+
+Set `OPENAI_API_KEY` and every saved script gets embedded (`text-embedding-3-small`) in the background as it's created or edited. `GET /api/search?q=...` then does a cosine-similarity search over `scripts.embedding` and returns the closest matches. Without the key, scripts just never get embedded and `/api/search` returns a clear "not configured" error instead of failing oddly.
 
 ## Cost controls
 
