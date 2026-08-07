@@ -424,6 +424,22 @@
     pointer-events: none; z-index: 15;
   }
 
+  /* --- dragging a video out of one group into another ----------------- */
+  /* A mini isn't its own Drawflow node — it's a plain div inside a
+     group's filmstrip — so Drawflow's own node-drag can't move it on its
+     own. This is a parallel, purely custom drag: a floating clone tracks
+     the cursor (fixed positioning — raw client coords, no zoom/pan math
+     needed since it's UI chrome, not canvas content) while the group
+     underneath the cursor gets a "magnetic" highlight so it's obvious
+     where letting go will drop it. */
+  .mini-drag-ghost {
+    position: fixed; z-index: 40; pointer-events: none; opacity: 0.9;
+    box-shadow: 0 16px 40px rgba(0,0,0,0.6); border-radius: var(--radius-sm);
+  }
+  .drawflow .drawflow-node.drop-target {
+    border-color: var(--accent-border); box-shadow: 0 0 0 2px var(--accent-soft), 0 14px 34px rgba(0,0,0,0.5);
+  }
+
   .script-node { width: 260px; }
   .script-node .head { display: flex; align-items: center; gap: 8px; padding: 11px 14px; border-bottom: 1px solid var(--border); font-weight: 500; font-size: 13px; color: var(--text); }
   .script-node .text { max-height: 200px; overflow-y: auto; padding: 12px 14px; font-size: 11.5px; line-height: 1.6; color: var(--text-dim); white-space: pre-wrap; }
@@ -1185,6 +1201,7 @@ function wireGroupNode(nodeId) {
       getData: () => state.editor.drawflow.drawflow.Home.data[nodeId].data.videos[idx],
       ensureTranscript: () => ensureGroupVideoTranscript(nodeId, idx),
     });
+    wireMiniDrag(nodeId, mini);
   });
   const nameEl = el.querySelector('.name');
   const inputEl = el.querySelector('.rename-input');
@@ -1208,6 +1225,66 @@ function wireGroupNode(nodeId) {
   }
   inputEl.addEventListener('blur', commit);
   inputEl.addEventListener('keydown', (e) => { if (e.key === 'Enter') inputEl.blur(); });
+}
+
+// Lets a video already inside one group be dragged into a *different*
+// group — a custom drag, not Drawflow's node-drag, since a mini is a
+// plain div inside a group's filmstrip rather than a node of its own.
+// A small movement threshold keeps a plain click (opening the play/menu
+// button, or just clicking the thumbnail) from starting a drag.
+function wireMiniDrag(groupNodeId, miniEl) {
+  miniEl.addEventListener('mousedown', (e) => {
+    if (e.button !== 0) return;
+    e.stopPropagation(); // never let this bubble into Drawflow's own node-drag on the whole group
+    const startX = e.clientX, startY = e.clientY;
+    const rect = miniEl.getBoundingClientRect();
+    let dragging = false, ghost = null, targetId = null;
+
+    // Clears the highlight on whatever group was previously lit up, then
+    // relights `id` (or nothing, for null) — reused for both "hovered a
+    // new group" and "drag ended" cleanup. onUp captures targetId into
+    // its own const *before* calling this for cleanup, since this
+    // reassigns the very variable the drop decision depends on.
+    const setHighlight = (id) => {
+      if (targetId != null) document.getElementById(`node-${targetId}`)?.classList.remove('drop-target');
+      targetId = id;
+      if (targetId != null) document.getElementById(`node-${targetId}`)?.classList.add('drop-target');
+    };
+    const onMove = (ev) => {
+      if (!dragging) {
+        if (Math.abs(ev.clientX - startX) < 5 && Math.abs(ev.clientY - startY) < 5) return;
+        dragging = true;
+        ghost = miniEl.cloneNode(true);
+        ghost.className = 'mini-drag-ghost';
+        ghost.style.width = `${rect.width}px`;
+        ghost.style.height = `${rect.height}px`;
+        document.body.appendChild(ghost);
+        miniEl.style.opacity = '0.35';
+      }
+      ghost.style.left = `${ev.clientX - rect.width / 2}px`;
+      ghost.style.top = `${ev.clientY - rect.height / 2}px`;
+      const hoverId = groupAtPoint(ev.clientX, ev.clientY);
+      setHighlight(hoverId != null && hoverId !== groupNodeId ? hoverId : null);
+    };
+    const onUp = () => {
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+      const dropTarget = targetId; // read before setHighlight(null) clobbers it
+      ghost?.remove();
+      miniEl.style.opacity = '';
+      setHighlight(null);
+      if (!dragging || dropTarget == null) return;
+      const source = state.editor.drawflow.drawflow.Home.data[groupNodeId];
+      const idx = Number(miniEl.dataset.idx);
+      const video = source.data.videos[idx];
+      state.editor.updateNodeDataFromId(groupNodeId, { ...source.data, videos: source.data.videos.filter((_, i) => i !== idx) });
+      rebuildNodeHtml(groupNodeId);
+      mergeVideosIntoGroup(dropTarget, [video]);
+      saveCanvasState();
+    };
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  });
 }
 
 // Finds the group-node (if any) whose rendered box contains a screen
@@ -1862,6 +1939,14 @@ function initEditor() {
     $('cursor-tool-btn').classList.toggle('active', tool === 'cursor');
     $('frame-tool-btn').classList.toggle('active', tool === 'frame');
     container.classList.toggle('frame-tool-active', tool === 'frame');
+    // The search panel floats *over* the canvas now (by design), which
+    // means a frame drawn near the right edge can land partly underneath
+    // its glass — technically at the exact point you dragged, but barely
+    // visible through the blur, which reads as "it appeared somewhere
+    // else." Getting the panel out of the way while the frame tool is
+    // active removes the whole class of "drew it right, can't see it"
+    // reports instead of trying to route around the panel's hit-testing.
+    if (tool === 'frame') $('search-panel').classList.add('collapsed');
   }
   $('cursor-tool-btn').addEventListener('click', () => setTool('cursor'));
   $('frame-tool-btn').addEventListener('click', () => setTool('frame'));
