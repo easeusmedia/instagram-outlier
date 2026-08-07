@@ -211,7 +211,17 @@
   .canvas-header {
     display: flex; align-items: center; gap: 10px; padding: 14px 22px;
     background: rgba(6,7,8,0.7); backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur);
-    border-bottom: 1px solid var(--border); flex-shrink: 0; z-index: 5;
+    border-bottom: 1px solid var(--border); flex-shrink: 0;
+    /* Only matters in fullscreen (below) where the header becomes
+       position:absolute — a static-positioned element ignores z-index
+       entirely, so this is inert in normal layout. In fullscreen,
+       .canvas-layout expands to the full height of #canvas-view (the
+       header no longer reserves flex space), which puts the header's
+       top edge at the same y as the search panel's — and the panel's
+       z-index (10) used to win, burying the settings/panel-toggle
+       buttons under it with no way to click them. This just needs to
+       clear that. */
+    z-index: 11;
   }
   /* Fullscreen only: take the header out of the layout flow entirely, so
      .canvas-layout fills the *full* height of #canvas-view instead of
