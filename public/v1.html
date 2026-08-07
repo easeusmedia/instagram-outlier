@@ -1510,6 +1510,14 @@ function refreshAndWireAllNodes() {
 
 // --- persistence -----------------------------------------------------------
 
+// The graph (nodes/connections) plus the camera (zoom/pan) it was viewed
+// at — saving both is what lets reopening a space put you back exactly
+// where you left it, instead of always re-centering on load.
+function buildCanvasStatePayload() {
+  const editor = state.editor;
+  return { graph: editor.export(), camera: { zoom: editor.zoom, x: editor.canvas_x, y: editor.canvas_y } };
+}
+
 let saveTimer = null;
 // Autosaves silently on every change — no "Saving…" text popping up on
 // every click. Only a real failure surfaces, since that's the one case
@@ -1519,7 +1527,7 @@ function saveCanvasState() {
   saveTimer = setTimeout(async () => {
     captureUndoCheckpoint();
     try {
-      await fetchJSON(`/api/spaces/${state.spaceId}`, { method: 'PUT', body: { canvasState: state.editor.export() } });
+      await fetchJSON(`/api/spaces/${state.spaceId}`, { method: 'PUT', body: { canvasState: buildCanvasStatePayload() } });
       $('save-status').textContent = '';
     } catch {
       $('save-status').textContent = 'Save failed';
@@ -1549,7 +1557,7 @@ function captureUndoCheckpoint() {
 
 async function persistCanvasImmediately() {
   clearTimeout(saveTimer);
-  try { await fetchJSON(`/api/spaces/${state.spaceId}`, { method: 'PUT', body: { canvasState: state.editor.export() } }); $('save-status').textContent = ''; }
+  try { await fetchJSON(`/api/spaces/${state.spaceId}`, { method: 'PUT', body: { canvasState: buildCanvasStatePayload() } }); $('save-status').textContent = ''; }
   catch { $('save-status').textContent = 'Save failed'; }
 }
 function restoreSnapshot(json) {
@@ -1868,6 +1876,10 @@ function initEditor() {
     }
     $('zoom-pct').textContent = `${Math.round(editor.zoom * 100)}%`;
     container.style.backgroundPosition = `${editor.canvas_x}px ${editor.canvas_y}px, 0 0, 0 0`;
+    // Every pan/zoom funnels through this one observer (native background-
+    // drag included) — piggyback the debounced autosave here so the camera
+    // you left off at actually gets persisted, not just the node graph.
+    saveCanvasState();
   }).observe(editor.precanvas, { attributes: true, attributeFilter: ['style'] });
 
   editor.on('nodeCreated', () => saveCanvasState());
@@ -2028,19 +2040,32 @@ async function openSpace(id) {
   document.title = `${space.name} — Instagram Outlier`;
 
   initEditor();
-  if (space.canvasState) {
-    state.editor.import(space.canvasState);
+  // Old spaces saved canvasState as the bare Drawflow export; new ones
+  // wrap it as { graph, camera } so the viewport can be restored too —
+  // `.graph` falls back to the whole blob for those older rows.
+  const saved = space.canvasState;
+  const graph = saved && (saved.graph || saved);
+  if (graph) {
+    state.editor.import(graph);
     refreshAndWireAllNodes();
   }
   ensureChatNode();
-  applyTransform();
-  // Baseline for undo/redo *before* the auto-organize below runs, so if
-  // someone doesn't like the auto-tidy they can still Ctrl+Z right back to
-  // their exact previous layout.
+  // Baseline for undo/redo *before* the auto-organize below (if any) runs,
+  // so if someone doesn't like the auto-tidy they can still Ctrl+Z right
+  // back to their exact previous layout.
   lastSnapshot = JSON.stringify(state.editor.export());
-  // Auto-tidy on every load — so a canvas nudged out of order never stays
-  // that way just because someone forgot to hit Organize before leaving.
-  if (space.canvasState) { organizeNodes(); recenterOnContent(); }
+  if (saved && saved.camera) {
+    // Reopen exactly where it was left — no re-centering, no re-tidying.
+    state.editor.zoom = saved.camera.zoom;
+    state.editor.canvas_x = saved.camera.x;
+    state.editor.canvas_y = saved.camera.y;
+    applyTransform();
+  } else {
+    applyTransform();
+    // No saved camera yet (brand new space, or one from before camera
+    // persistence existed) — auto-tidy once so it doesn't open scattered.
+    if (graph) { organizeNodes(); recenterOnContent(); }
+  }
   loadTrackedCategories();
 }
 
