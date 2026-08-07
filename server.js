@@ -99,8 +99,16 @@ if (!process.env.DATABASE_URL) {
 }
 
 const { Pool } = pg;
+// Neon's connection string ships with `?sslmode=require` — harmless, but
+// pg-connection-string prints a deprecation warning on every single parse
+// of any sslmode value other than verify-full, regardless of the explicit
+// `ssl` option below actually being what's used. We manage TLS ourselves,
+// so drop the query param at the source instead of eating that warning on
+// every boot.
+const dbUrl = new URL(process.env.DATABASE_URL);
+dbUrl.searchParams.delete('sslmode');
 const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
+  connectionString: dbUrl.toString(),
   // Neon (and most hosted Postgres) terminate TLS with a cert chain `pg`
   // doesn't validate by default; a plain local Postgres has no TLS at all.
   ssl: /localhost|127\.0\.0\.1/.test(process.env.DATABASE_URL) ? false : { rejectUnauthorized: false },
