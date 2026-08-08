@@ -1763,6 +1763,56 @@ function refreshAndWireAllNodes() {
   });
 }
 
+// A video/group node's views/outlierScore is a snapshot frozen at the
+// moment it was dragged onto the canvas — it never sees the background
+// weekly refresh that keeps the server's own reel cache current, so an old
+// node can sit there quietly showing numbers from weeks ago (confirmed
+// live: a canvas node stuck at 180K views for a reel already past 1M in
+// the cache). This patches every node's stats from that cache in one cheap
+// round-trip (no Apify call — /api/reel-stats only reads what's already
+// stored) right after a space opens, so what's on screen matches what the
+// rest of the app already knows.
+async function refreshCanvasStatsFromCache() {
+  const data = state.editor.drawflow.drawflow.Home.data;
+  const handles = new Set();
+  Object.values(data).forEach((n) => {
+    if (n.class === 'video-node' && n.data.handle) handles.add(n.data.handle);
+    else if (n.class === 'group-node') n.data.videos.forEach((v) => v.handle && handles.add(v.handle));
+  });
+  if (!handles.size) return;
+  let stats;
+  try {
+    ({ stats } = await fetchJSON(`/api/reel-stats?handles=${encodeURIComponent([...handles].join(','))}`));
+  } catch {
+    return; // best-effort — canvas keeps whatever it already had
+  }
+  const touched = new Set();
+  Object.entries(data).forEach(([id, n]) => {
+    if (n.class === 'video-node') {
+      const fresh = stats[n.data.handle]?.[n.data.shortCode];
+      if (fresh && (fresh.views !== n.data.views || fresh.outlierScore !== n.data.outlierScore)) {
+        state.editor.updateNodeDataFromId(Number(id), { ...n.data, ...fresh });
+        touched.add(Number(id));
+      }
+    } else if (n.class === 'group-node') {
+      let changed = false;
+      const videos = n.data.videos.map((v) => {
+        const fresh = stats[v.handle]?.[v.shortCode];
+        if (fresh && (fresh.views !== v.views || fresh.outlierScore !== v.outlierScore)) { changed = true; return { ...v, ...fresh }; }
+        return v;
+      });
+      if (changed) {
+        state.editor.updateNodeDataFromId(Number(id), { ...n.data, videos });
+        touched.add(Number(id));
+      }
+    }
+  });
+  if (touched.size) {
+    touched.forEach((id) => rebuildNodeHtml(id));
+    saveCanvasState();
+  }
+}
+
 // --- persistence -----------------------------------------------------------
 
 // The graph (nodes/connections) plus the camera (zoom/pan) it was viewed
@@ -2316,6 +2366,7 @@ async function openSpace(id) {
   if (graph) {
     state.editor.import(graph);
     refreshAndWireAllNodes();
+    refreshCanvasStatsFromCache();
   }
   ensureChatNode();
   // Baseline for undo/redo *before* the auto-organize below (if any) runs,

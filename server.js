@@ -902,6 +902,40 @@ app.get('/api/reel', async (req, res) => {
   }
 });
 
+// Canvas nodes store a *frozen* copy of a reel's views/outlierScore/likes
+// from whenever it was dragged onto the canvas — that's what lets the
+// canvas render instantly without a network round-trip per node, but it
+// means a node placed weeks ago just sits there silently drifting further
+// from reality while the background weekly refresh keeps the underlying
+// `reels` cache current (verified: one canvas node was showing 180K views
+// for a reel already at 1M+ in the cache). This is the read side of that
+// gap: given the handles actually present on a canvas, hand back current
+// cached stats keyed by shortCode so the client can patch its frozen nodes
+// in place. Pure cache read — no Apify call, so opening a space never costs
+// quota — but it also nudges the same weekly-cooldown background refresh
+// /api/creator uses, so a creator only ever seen via canvas (never
+// re-searched) still keeps refreshing instead of freezing forever.
+app.get('/api/reel-stats', async (req, res) => {
+  try {
+    const handles = String(req.query.handles || '')
+      .split(',').map((h) => h.trim().toLowerCase()).filter(Boolean);
+    const stats = {};
+    for (const handle of handles) {
+      const reels = await getCreatorReels(handle);
+      if (!reels) continue;
+      stats[handle] = {};
+      for (const r of reels) {
+        stats[handle][r.shortCode] = { views: r.views, outlierScore: r.outlierScore, likes: r.likes };
+      }
+      refreshCreatorInBackground(handle, reels, reels.length);
+    }
+    res.json({ stats });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: err.message || 'Something went wrong.' });
+  }
+});
+
 app.get('/api/transcript', async (req, res) => {
   try {
     const parsed = parseInput(req.query.input);
