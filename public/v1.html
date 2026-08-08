@@ -2616,10 +2616,14 @@ function renderResults() {
   const sorted = state.sortMode === 'outlier'
     ? list.sort((a, b) => (b.outlierScore ?? -1) - (a.outlierScore ?? -1))
     : list.sort((a, b) => new Date(b.timestamp || 0) - new Date(a.timestamp || 0));
+  // Strictly top 15 by whichever mode is active — the pool itself holds
+  // everything fetched (up to REELS_LIMIT/Load More depth) so the ranking
+  // has enough history to be honest, but only the true top 15 is shown.
+  const top15 = sorted.slice(0, 15);
 
   const container = $('search-results');
   container.innerHTML = '';
-  sorted.forEach((r) => {
+  top15.forEach((r) => {
     const card = document.createElement('div');
     card.className = 'video-card';
     card.draggable = true;
@@ -2665,8 +2669,14 @@ function renderResults() {
   });
 }
 
+// Pool holds everything fetched for whichever creator(s) are in view — not
+// capped here. It used to truncate to the newest 15 on every call, which
+// meant "Outlier" mode was silently just re-sorting the 15 *latest* reels
+// (never actually finding the creator's true best), since anything older
+// than that was thrown away before it ever reached the pool. renderResults
+// is what caps the *display* to top 15, from whichever sort mode is active.
 function addToPool(reels, handle) {
-  reels.slice(0, 15).forEach((r) => state.pool.set(r.shortCode, { ...r, handle }));
+  reels.forEach((r) => state.pool.set(r.shortCode, { ...r, handle }));
   renderResults();
 }
 function removeFromPoolByHandle(handle) {
@@ -2680,7 +2690,11 @@ function removeFromPoolByHandle(handle) {
 function renderCreatorHeader(data) {
   const box = $('creator-result-header');
   box.style.display = 'flex';
-  box.innerHTML = `<span class="info">${data.reels.length} videos from <b>@${escapeHtml(data.profile.handle)}</b></span>`;
+  // data.reels.length can be well past 15 (it's the creator's whole fetched
+  // history, used to rank the top 15 honestly) — say so, since the card
+  // list below only ever shows 15 of them and that gap would otherwise
+  // look like a bug.
+  box.innerHTML = `<span class="info">Top 15 of ${data.reels.length} videos from <b>@${escapeHtml(data.profile.handle)}</b></span>`;
   const trackBtn = document.createElement('button');
   trackBtn.className = 'secondary' + (data.bookmarked ? ' active' : '');
   trackBtn.textContent = data.bookmarked ? '✓ Tracking' : '+ Track';
@@ -2709,7 +2723,7 @@ async function searchCreator() {
   statusEl.textContent = 'Loading…';
   statusEl.classList.remove('error');
   hideCreatorHeader();
-  state.currentLimit = 15;
+  state.currentLimit = 60; // matches server's REELS_LIMIT — enough history for an honest top-15-by-outlier
   state.poolLoadToken++; // invalidate any in-flight loadDefaultPool so it can't clobber this search
   try {
     const data = await fetchJSON(`/api/creator?input=${encodeURIComponent(input)}&limit=${state.currentLimit}`);
@@ -2823,7 +2837,7 @@ async function loadTrackedCategories() {
         exitSearchIfActive();
         if (e.target.checked) {
           state.checkedHandles.add(c.handle);
-          const data = await fetchJSON(`/api/creator?input=${encodeURIComponent(c.handle)}&limit=15`);
+          const data = await fetchJSON(`/api/creator?input=${encodeURIComponent(c.handle)}`); // no explicit limit — inherits server's REELS_LIMIT (60), deep enough for accurate top-15 ranking
           addToPool(data.reels, data.profile.handle);
         } else {
           state.checkedHandles.delete(c.handle);
@@ -2844,7 +2858,7 @@ async function loadDefaultPool() {
     for (const h of state.checkedHandles) {
       if (state.poolLoadToken !== token) return;
       try {
-        const data = await fetchJSON(`/api/creator?input=${encodeURIComponent(h)}&limit=15`);
+        const data = await fetchJSON(`/api/creator?input=${encodeURIComponent(h)}`); // no explicit limit — inherits server's REELS_LIMIT (60), deep enough for accurate top-15 ranking
         if (state.poolLoadToken !== token) return;
         addToPool(data.reels, data.profile.handle);
       } catch { /* skip creators that fail to load */ }
@@ -2856,7 +2870,7 @@ async function loadDefaultPool() {
   for (const b of state.allTracked) {
     if (state.poolLoadToken !== token) return;
     try {
-      const data = await fetchJSON(`/api/creator?input=${encodeURIComponent(b.handle)}&limit=15`);
+      const data = await fetchJSON(`/api/creator?input=${encodeURIComponent(b.handle)}`); // no explicit limit — inherits server's REELS_LIMIT (60), deep enough for accurate top-15 ranking
       if (state.poolLoadToken !== token) return;
       addToPool(data.reels, data.profile.handle);
     } catch { /* skip creators that fail to load */ }

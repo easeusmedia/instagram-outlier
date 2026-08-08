@@ -9,7 +9,15 @@ import crypto from 'node:crypto';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 // --- tunables ---------------------------------------------------------
-const REELS_LIMIT = 15; // initial load, and the "Load More" batch size
+// 15 was too shallow to rank "top 15 by outlier score" honestly — a
+// creator's highest-viewed reel is often months old, so a chronological
+// 15-reel window only ever contains their *recent* videos, never their
+// true best. Verified live: whysaksham's real top-15-by-views included 7
+// reels from March–May that a 15-or-27-deep cache never had. 60 is a
+// tested middle ground (confirmed to surface every real top-15 entry for
+// two different creators) — accounts with a much deeper viral history
+// than that still get shortchanged; "Load More" extends past it.
+const REELS_LIMIT = 60; // initial load, and the "Load More" batch size
 const REEL_ACTOR = 'apify~instagram-reel-scraper';
 const PROFILE_ACTOR = 'apify~instagram-profile-scraper';
 const TRANSCRIPT_ACTOR = 'apple_yang~instagram-transcripts-scraper';
