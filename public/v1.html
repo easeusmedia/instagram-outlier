@@ -1135,6 +1135,7 @@ const state = {
   pool: new Map(),        // shortCode -> reel (with .handle attached) — everything ever pulled into the panel
   selected: new Set(),    // shortCodes checked for multi-select group creation
   currentHandle: null, currentLimit: 15,
+  displayCount: 15, hasMore: false, // how many of the pool's sorted results to actually show — grows via "Load more"
   showAllTracked: true, allTracked: [], categories: [], // [{handle, profile}] / [{id, name}]
   checkedHandles: new Set(), // which tracked creators contribute to the pool when "show all" is off
   poolLoadToken: 0, // bumped to invalidate an in-flight loadDefaultPool() when a search takes over
@@ -2616,14 +2617,21 @@ function renderResults() {
   const sorted = state.sortMode === 'outlier'
     ? list.sort((a, b) => (b.outlierScore ?? -1) - (a.outlierScore ?? -1))
     : list.sort((a, b) => new Date(b.timestamp || 0) - new Date(a.timestamp || 0));
-  // Strictly top 15 by whichever mode is active — the pool itself holds
-  // everything fetched (up to REELS_LIMIT/Load More depth) so the ranking
-  // has enough history to be honest, but only the true top 15 is shown.
-  const top15 = sorted.slice(0, 15);
+  // Top N by whichever mode is active, N = state.displayCount (starts at
+  // 15, grows via the "Load more" button below the list). The pool itself
+  // holds everything fetched (up to REELS_LIMIT/Load More depth) so the
+  // ranking has enough history to be honest even before the user asks to
+  // see past the first 15.
+  const shown = sorted.slice(0, state.displayCount);
+  updateResultsHeaderCount();
+  // More to reveal either if the pool already holds more than what's on
+  // screen, or if the server says this creator has more history we
+  // haven't even fetched yet.
+  $('load-more-btn').style.display = (state.currentHandle && (state.pool.size > shown.length || state.hasMore)) ? 'block' : 'none';
 
   const container = $('search-results');
   container.innerHTML = '';
-  top15.forEach((r) => {
+  shown.forEach((r) => {
     const card = document.createElement('div');
     card.className = 'video-card';
     card.draggable = true;
@@ -2674,7 +2682,8 @@ function renderResults() {
 // meant "Outlier" mode was silently just re-sorting the 15 *latest* reels
 // (never actually finding the creator's true best), since anything older
 // than that was thrown away before it ever reached the pool. renderResults
-// is what caps the *display* to top 15, from whichever sort mode is active.
+// is what caps the *display* to state.displayCount, from whichever sort
+// mode is active.
 function addToPool(reels, handle) {
   reels.forEach((r) => state.pool.set(r.shortCode, { ...r, handle }));
   renderResults();
@@ -2684,17 +2693,30 @@ function removeFromPoolByHandle(handle) {
   renderResults();
 }
 
+// Keeps the "Top N of M videos from @handle" header text in sync with
+// state.displayCount as "Load more" grows it — a no-op if the header isn't
+// showing yet (e.g. called from the very first addToPool, before
+// renderCreatorHeader has built the span it targets).
+function updateResultsHeaderCount() {
+  const el = document.getElementById('results-header-count');
+  if (!el || !state.currentHandle) return;
+  const shown = Math.min(state.displayCount, state.pool.size);
+  el.innerHTML = `Top ${shown} of ${state.pool.size} videos from <b>@${escapeHtml(state.currentHandle)}</b>`;
+}
+
 // Renders the "N videos from @handle" + Track button as its own header
 // row (separate from the plain status line) so the Track button is never
 // easy to miss the way it was buried inline in a small status div.
 function renderCreatorHeader(data) {
   const box = $('creator-result-header');
   box.style.display = 'flex';
-  // data.reels.length can be well past 15 (it's the creator's whole fetched
-  // history, used to rank the top 15 honestly) — say so, since the card
-  // list below only ever shows 15 of them and that gap would otherwise
-  // look like a bug.
-  box.innerHTML = `<span class="info">Top 15 of ${data.reels.length} videos from <b>@${escapeHtml(data.profile.handle)}</b></span>`;
+  // data.reels.length can be well past what's currently shown (it's the
+  // creator's whole fetched history, used to rank the top N honestly) —
+  // say so, since the card list below doesn't show all of it and that gap
+  // would otherwise look like a bug. Kept in sync as "Load more" grows the
+  // shown count via updateResultsHeaderCount().
+  box.innerHTML = `<span class="info" id="results-header-count"></span>`;
+  updateResultsHeaderCount();
   const trackBtn = document.createElement('button');
   trackBtn.className = 'secondary' + (data.bookmarked ? ' active' : '');
   trackBtn.textContent = data.bookmarked ? '✓ Tracking' : '+ Track';
@@ -2710,6 +2732,8 @@ function hideCreatorHeader() { $('creator-result-header').style.display = 'none'
 function exitSearchIfActive() {
   if (!state.currentHandle) return;
   state.currentHandle = null;
+  state.displayCount = 15;
+  state.hasMore = false;
   $('search-input').value = '';
   $('search-status').textContent = '';
   $('load-more-btn').style.display = 'none';
@@ -2724,15 +2748,16 @@ async function searchCreator() {
   statusEl.classList.remove('error');
   hideCreatorHeader();
   state.currentLimit = 60; // matches server's REELS_LIMIT — enough history for an honest top-15-by-outlier
+  state.displayCount = 15; // a fresh search always starts back at the top 15; "Load more" grows it from here
   state.poolLoadToken++; // invalidate any in-flight loadDefaultPool so it can't clobber this search
   try {
     const data = await fetchJSON(`/api/creator?input=${encodeURIComponent(input)}&limit=${state.currentLimit}`);
     state.currentHandle = data.profile.handle;
+    state.hasMore = data.hasMore;
     state.pool.clear();
-    addToPool(data.reels, data.profile.handle);
+    addToPool(data.reels, data.profile.handle); // renders and sets Load more's visibility
     statusEl.textContent = '';
     renderCreatorHeader(data);
-    $('load-more-btn').style.display = data.hasMore ? 'block' : 'none';
   } catch (err) {
     statusEl.textContent = err.message;
     statusEl.classList.add('error');
@@ -2756,10 +2781,16 @@ $('sort-latest').addEventListener('click', () => {
   renderResults();
 });
 $('load-more-btn').addEventListener('click', async () => {
+  state.displayCount += 15;
+  // The pool may already hold enough to cover the new displayCount (e.g.
+  // the initial 60-deep fetch already has plenty beyond the first 15) —
+  // only go back to the server when there's genuinely nothing left to
+  // reveal locally.
+  if (state.pool.size >= state.displayCount || !state.hasMore) { renderResults(); return; }
   state.currentLimit += 15;
   const data = await fetchJSON(`/api/creator?input=${encodeURIComponent(state.currentHandle)}&limit=${state.currentLimit}`);
-  addToPool(data.reels, data.profile.handle);
-  $('load-more-btn').style.display = data.hasMore ? 'block' : 'none';
+  state.hasMore = data.hasMore;
+  addToPool(data.reels, data.profile.handle); // re-renders with the deeper pool
 });
 
 // --- track modal (category is mandatory — no silent Uncategorized) ------
