@@ -571,6 +571,14 @@ function normalizeReelItem(it) {
     duration: numOrNull(it.videoDuration),
     timestamp: it.timestamp || null,
     transcript: it.transcript || null,
+    // Instagram's own displayed view count for branded/paid-partnership
+    // content includes ad-delivered reach that no public scraper can see —
+    // verified live (kallaway's #ChatGPT_Partner reel: we show 21.4M,
+    // Instagram's own grid shows 28.9M). There's no way to recover the
+    // true number from public data, so this flag is surfaced to the client
+    // to mark affected reels as a floor rather than silently understating
+    // them as exact.
+    paidPartnership: it.paidPartnership === true,
   };
 }
 

@@ -457,6 +457,11 @@
   .reel-meta .handle { font-size: 11.5px; font-weight: 500; color: var(--text-dim); text-decoration: none; display: inline-block; }
   .reel-meta a.handle:hover { color: var(--text); text-decoration: underline; }
   .reel-meta .views { font-size: 11px; color: var(--text-faint); margin-top: 2px; }
+  /* Flags a reel Instagram itself marks as branded/paid content — its
+     displayed view count on Instagram includes ad-delivered reach that no
+     public scraper can see, so the number shown here is a verified floor,
+     not the true total. See sponsoredNote(). */
+  .sponsored-tag { color: #E8A33D; font-weight: 600; cursor: help; }
 
   .video-node { width: var(--reel-w); }
 
@@ -930,6 +935,17 @@ function scoreBadge(score) {
   const cls = score == null ? '' : score >= 3 ? 'score-hot' : score >= 1.5 ? 'score-mid' : 'score-low';
   return `<span class="score ${cls}">${score != null ? score.toFixed(1) + '×' : '—'}</span>`;
 }
+// Instagram's own displayed view count for a branded/paid-partnership post
+// includes ad-delivered reach — verified live against a real reference
+// export (kallaway's #ChatGPT_Partner reel: we show 21.4M, Instagram's own
+// grid shows 28.9M) — and that gap isn't visible through any public
+// scraping route, ours or anyone else's. Rather than silently show a
+// number we know can be a significant undercount, flag it so it reads as
+// "at least this many", not "exactly this many".
+function sponsoredNote(v) {
+  if (!v.paidPartnership) return '';
+  return ` <span class="sponsored-tag" title="Sponsored/branded content — Instagram includes paid ad reach in its own view count for posts like this, which no public scraper can see. This number is a verified floor, not the true total.">Sponsored</span>`;
+}
 function imgFallback(el) {
   el.onerror = null;
   el.src = 'data:image/svg+xml;utf8,' + encodeURIComponent(
@@ -1197,7 +1213,7 @@ function buildReelFrame(v) {
     </div>
     <div class="reel-meta">
       ${v.url ? `<a class="handle" href="${v.url}" target="_blank" rel="noopener">@${escapeHtml(v.handle || '')}</a>` : `<div class="handle">@${escapeHtml(v.handle || '')}</div>`}
-      <div class="views">${fmtNum(v.views)} views</div>
+      <div class="views">${fmtNum(v.views)} views${sponsoredNote(v)}</div>
     </div>
   `;
 }
@@ -2653,7 +2669,7 @@ function renderResults() {
       </div>
       <div class="info">
         <div>@${escapeHtml(r.handle || '')}</div>
-        <div class="views">${fmtNum(r.views)} views</div>
+        <div class="views">${fmtNum(r.views)} views${sponsoredNote(r)}</div>
       </div>
     `;
     card.querySelector('.play-btn').addEventListener('click', (e) => { e.stopPropagation(); playInline(card.querySelector('.reel-frame'), r); });

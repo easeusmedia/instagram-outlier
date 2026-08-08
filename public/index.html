@@ -529,6 +529,10 @@
   .reel-card .handle { color: var(--accent); font-weight: 600; font-size: 13px; text-decoration: none; }
   .reel-card .handle:hover { text-decoration: underline; }
   .reel-card .stats { color: var(--muted); font-size: 12px; display: flex; gap: 10px; flex-wrap: wrap; }
+  /* Flags a reel Instagram itself marks as branded/paid content — see
+     sponsoredNote(). Its displayed view count includes ad-delivered reach
+     no public scraper can see, so the number shown is a verified floor. */
+  .sponsored-tag { color: #E8A33D; font-weight: 600; cursor: help; }
   .reel-card .row { display: flex; gap: 10px; flex-wrap: wrap; }
   .reel-card .row a, .reel-card .row button {
     font-size: 12px; color: var(--muted); background: rgba(255,255,255,0.05);
@@ -921,6 +925,17 @@ function fmtNum(n) {
   if (n >= 1_000_000) return (n / 1_000_000).toFixed(1) + 'M';
   if (n >= 1_000) return (n / 1_000).toFixed(1) + 'K';
   return String(n);
+}
+
+// Instagram's own displayed view count for a branded/paid-partnership post
+// includes ad-delivered ad reach — verified live against a real reference
+// export (kallaway's #ChatGPT_Partner reel: we show 21.4M, Instagram's own
+// grid shows 28.9M) — and that gap isn't visible through any public
+// scraping route, ours or anyone else's. Flag it so the number reads as
+// "at least this many", not "exactly this many".
+function sponsoredNote(v) {
+  if (!v.paidPartnership) return '';
+  return ` <span class="sponsored-tag" title="Sponsored/branded content — Instagram includes paid ad reach in its own view count for posts like this, which no public scraper can see. This number is a verified floor, not the true total.">Sponsored</span>`;
 }
 
 function fmtDuration(s) {
@@ -1512,7 +1527,7 @@ function buildReelCard(reel, handle) {
     <div class="body">
       <a class="handle" href="https://instagram.com/${encodeURIComponent(handle)}" target="_blank" rel="noopener">@${escapeHtml(handle)}</a>
       <div class="stats">
-        <span>${fmtNum(reel.views)} views</span>
+        <span>${fmtNum(reel.views)} views${sponsoredNote(reel)}</span>
         <span>${fmtDuration(reel.duration)}</span>
         <span>${reel.timestamp ? new Date(reel.timestamp).toLocaleDateString() : '—'}</span>
       </div>
