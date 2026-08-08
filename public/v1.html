@@ -2614,8 +2614,15 @@ $('account-delete-btn').addEventListener('click', async () => {
 
 function renderResults() {
   const list = [...state.pool.values()];
+  // Outlier score is capped (OUTLIER_SCORE_CAP in server.js) so two very
+  // different reels can tie at the same displayed score — verified live on
+  // kallaway, where a 52.6M-view reel and a 21.4M-view reel both cap at
+  // 100x. Without a tiebreaker, sort order for ties falls back to array
+  // order (most-recent-first, from the server), which silently ranked the
+  // smaller one above the bigger one. Views-desc as the tiebreaker means a
+  // tie always resolves to the actually-bigger reel.
   const sorted = state.sortMode === 'outlier'
-    ? list.sort((a, b) => (b.outlierScore ?? -1) - (a.outlierScore ?? -1))
+    ? list.sort((a, b) => (b.outlierScore ?? -1) - (a.outlierScore ?? -1) || (b.views ?? 0) - (a.views ?? 0))
     : list.sort((a, b) => new Date(b.timestamp || 0) - new Date(a.timestamp || 0));
   // Top N by whichever mode is active, N = state.displayCount (starts at
   // 15, grows via the "Load more" button below the list). The pool itself
