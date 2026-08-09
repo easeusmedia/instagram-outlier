@@ -639,7 +639,13 @@ async function refreshCreatorInBackground(handle, cachedReels, limit) {
 // --- app --------------------------------------------------------------
 
 const app = express();
-app.use(express.json());
+// Express's default 100kb limit is easy to hit here specifically: a
+// space's canvas_state includes every node's *rendered* HTML (not just
+// data), and a handful of group-nodes each holding several videos'
+// thumbnails/captions adds up fast — confirmed live, a space with ~10
+// real nodes plus a dozen more comfortably cleared 100kb and got a save
+// silently rejected with a generic 413.
+app.use(express.json({ limit: '10mb' }));
 
 app.get('/auth/google', (req, res) => {
   const state = crypto.randomBytes(16).toString('hex');

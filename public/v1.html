@@ -2007,20 +2007,76 @@ function organizeNodes() {
   // on an already-tidy canvas doesn't needlessly shuffle node order.
   columns.forEach((col) => col.sort((a, b) => data[a].pos_y - data[b].pos_y));
 
-  const colWidths = columns.map((col) => Math.max(0, ...col.map((id) => dims[id].w)));
-  const colHeights = columns.map((col) => col.reduce((sum, id) => sum + dims[id].h, 0) + gap * Math.max(0, col.length - 1));
-  const tallest = Math.max(0, ...colHeights);
+  // Each layer wraps into its own compact shelf-packed block instead of
+  // one ever-taller single-file column — a canvas full of unconnected
+  // video nodes (all layer 0, since none has an incoming connection) used
+  // to stack into one towering strip using barely any horizontal space at
+  // all. A layer's dependency order (left-to-right between layers) still
+  // matters and is untouched; only the *within-layer* arrangement goes
+  // from purely vertical to a mix of rows and columns.
+  //
+  // A uniform grid (every cell sized to the layer's single widest/tallest
+  // node) was the first thing tried here and made it worse, not better —
+  // group-nodes render as wide horizontal filmstrips next to much
+  // narrower video-nodes in the very same layer, so forcing every cell to
+  // the group-node's width wasted enormous space under every video-node
+  // cell. Shelf-packing sizes each node at its own real footprint and
+  // just wraps to a new row once a row gets wider than a roughly-square
+  // target width for that layer's total area — standard bin-packing
+  // heuristic, cheap, and doesn't require every item to be the same size
+  // to behave well.
+  function packLayerShelf(col) {
+    const totalArea = col.reduce((sum, id) => sum + dims[id].w * dims[id].h, 0);
+    const widest = Math.max(0, ...col.map((id) => dims[id].w));
+    // sqrt(area) alone is the standard "aim for a square" target row
+    // width; widening it a bit reads more naturally on a canvas that's
+    // normally viewed wider than tall. Never narrower than the single
+    // widest node, or that node would force-wrap against itself.
+    const targetRowWidth = Math.max(Math.sqrt(totalArea) * 1.4, widest);
+    const rows = [];
+    let currentRow = [], currentRowWidth = 0;
+    col.forEach((id) => {
+      const w = dims[id].w;
+      if (currentRow.length && currentRowWidth + gap + w > targetRowWidth) {
+        rows.push(currentRow);
+        currentRow = [];
+        currentRowWidth = 0;
+      }
+      currentRow.push(id);
+      currentRowWidth += (currentRow.length > 1 ? gap : 0) + w;
+    });
+    if (currentRow.length) rows.push(currentRow);
+
+    const positions = {};
+    let y = 0, blockWidth = 0;
+    rows.forEach((row) => {
+      let rowX = 0;
+      const rowHeight = Math.max(...row.map((id) => dims[id].h));
+      row.forEach((id) => {
+        positions[id] = { x: rowX, y };
+        rowX += dims[id].w + gap;
+      });
+      blockWidth = Math.max(blockWidth, rowX - gap);
+      y += rowHeight + gap;
+    });
+    return { positions, width: blockWidth, height: Math.max(0, y - gap) };
+  }
+
+  const packed = columns.map(packLayerShelf);
+  const tallest = Math.max(0, ...packed.map((p) => p.height));
 
   let x = 0;
   columns.forEach((col, ci) => {
-    let y = (tallest - colHeights[ci]) / 2; // center this column against the tallest one
+    const p = packed[ci];
+    const yOffset = (tallest - p.height) / 2; // center this layer against the tallest one
     col.forEach((id) => {
-      data[id].pos_x = x; data[id].pos_y = y;
+      const nodeX = x + p.positions[id].x;
+      const nodeY = yOffset + p.positions[id].y;
+      data[id].pos_x = nodeX; data[id].pos_y = nodeY;
       const el = document.getElementById(`node-${id}`);
-      if (el) { el.style.left = `${x}px`; el.style.top = `${y}px`; }
-      y += dims[id].h + gap;
+      if (el) { el.style.left = `${nodeX}px`; el.style.top = `${nodeY}px`; }
     });
-    x += colWidths[ci] + colGap;
+    x += p.width + colGap;
   });
 
   allIds.forEach((id) => editor.updateConnectionNodes(`node-${id}`));
