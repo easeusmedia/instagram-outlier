@@ -399,7 +399,7 @@
   /* Muted white/gray at rest — blue is reserved for the brief flash right
      when a connection is made (see .just-connected), not a permanent color. */
   .drawflow .drawflow-node .input, .drawflow .drawflow-node .output {
-    background: rgba(255,255,255,0.35); border: 2px solid rgba(6,7,8,0.95); width: 13px; height: 13px;
+    background: var(--text-faint); border: 2px solid rgba(6,7,8,0.95); width: 13px; height: 13px;
     transition: background .7s ease, box-shadow .7s ease;
   }
   .drawflow .drawflow-node .input.just-connected, .drawflow .drawflow-node .output.just-connected {
@@ -542,21 +542,25 @@
   .chat-node { width: 320px; }
   .chat-node .head { display: flex; align-items: center; gap: 8px; padding: 13px 15px; border-bottom: 1px solid var(--border); font-weight: 500; font-size: 13px; color: var(--text); }
   .chat-node .body { padding: 13px 15px; display: flex; flex-direction: column; gap: 10px; }
-  .chat-node .attached { flex-wrap: wrap; gap: 6px; }
-  .chat-node .attached .chip {
+  .chat-node .attached, .chat-node .chat-attachments-staged { flex-wrap: wrap; gap: 6px; }
+  .chat-node .attached .chip, .chat-node .chat-attachments-staged .chip {
     display: inline-flex; align-items: center; gap: 5px; font-size: 10.5px; color: var(--text-faint);
     background: var(--surface); border: 1px solid var(--border); border-radius: 20px; padding: 3px 6px 3px 7px;
-    cursor: default; transition: border-color .15s;
+    cursor: default; transition: border-color .15s; max-width: 200px;
   }
   .chat-node .attached .chip .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--text-faint); flex-shrink: 0; }
-  .chat-node .attached .chip.ready { color: var(--text-dim); cursor: pointer; }
-  .chat-node .attached .chip.ready:hover { border-color: var(--border-hover); }
+  .chat-node .attached .chip.ready, .chat-node .chat-attachments-staged .chip.ready { color: var(--text-dim); cursor: pointer; }
+  .chat-node .attached .chip.ready:hover, .chat-node .chat-attachments-staged .chip.ready:hover { border-color: var(--border-hover); }
   .chat-node .attached .chip.ready .dot { background: #4CFF9E; }
-  .chat-node .attached .chip .chip-x {
+  .chat-node .attached .chip .chip-x, .chat-node .chat-attachments-staged .chip .chip-x {
     width: 15px; height: 15px; border-radius: 50%; border: none; background: transparent; color: var(--text-faint);
     display: flex; align-items: center; justify-content: center; flex-shrink: 0;
   }
-  .chat-node .attached .chip .chip-x:hover { background: rgba(255,107,107,0.18); color: var(--danger); }
+  .chat-node .attached .chip .chip-x:hover, .chat-node .chat-attachments-staged .chip .chip-x:hover { background: rgba(255,107,107,0.18); color: var(--danger); }
+  .chat-node .chat-attachments-staged .chip svg { flex-shrink: 0; }
+  .chat-node .chat-attachments-staged .chip .chip-label {
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
   /* Empty state (no messages yet) collapses to nothing instead of an empty
      scroll box with visible padding — the input row alone is the "start
      typing" affordance. */
@@ -1204,6 +1208,7 @@ const state = {
   displayCount: 15, hasMore: false, // how many of the pool's sorted results to actually show — grows via "Load more"
   showAllTracked: true, allTracked: [], categories: [], // [{handle, profile}] / [{id, name}]
   checkedHandles: new Set(), // which tracked creators contribute to the pool when "show all" is off
+  creatorHasMore: new Map(), // handle -> hasMore, filled in whenever that creator's reels get fetched
   poolLoadToken: 0, // bumped to invalidate an in-flight loadDefaultPool() when a search takes over
   pendingConnection: null,
   tool: 'cursor', // 'cursor' | 'frame' — which bottom-toolbar tool is active on the canvas
@@ -1772,7 +1777,7 @@ function wireChatNode(nodeId) {
   let staged = [];
   function renderStaged() {
     stagedEl.innerHTML = staged.map((f, i) => `
-      <span class="chip ready">${icon('attach', { size: 9 })}${escapeHtml(f.name)}<button class="chip-x" data-idx="${i}" title="Remove">${icon('close', { size: 9 })}</button></span>
+      <span class="chip ready" title="${escapeHtml(f.name)}">${icon('attach', { size: 9 })}<span class="chip-label">${escapeHtml(f.name)}</span><button class="chip-x" data-idx="${i}" title="Remove">${icon('close', { size: 9 })}</button></span>
     `).join('');
   }
   stagedEl.addEventListener('click', (e) => {
@@ -3126,11 +3131,13 @@ async function loadTrackedCategories() {
         if (e.target.checked) {
           state.checkedHandles.add(c.handle);
           const data = await fetchJSON(`/api/creator?input=${encodeURIComponent(c.handle)}`); // no explicit limit — inherits server's REELS_LIMIT (60), deep enough for accurate top-15 ranking
+          state.creatorHasMore.set(c.handle, data.hasMore);
           addToPool(data.reels, data.profile.handle);
         } else {
           state.checkedHandles.delete(c.handle);
           removeFromPoolByHandle(c.handle);
         }
+        syncTrackedLoadMore();
       });
       body.appendChild(row);
     });
@@ -3148,9 +3155,11 @@ async function loadDefaultPool() {
       try {
         const data = await fetchJSON(`/api/creator?input=${encodeURIComponent(h)}`); // no explicit limit — inherits server's REELS_LIMIT (60), deep enough for accurate top-15 ranking
         if (state.poolLoadToken !== token) return;
+        state.creatorHasMore.set(h, data.hasMore);
         addToPool(data.reels, data.profile.handle);
       } catch { /* skip creators that fail to load */ }
     }
+    syncTrackedLoadMore();
     return;
   }
   state.checkedHandles = new Set(state.allTracked.map((b) => b.handle));
@@ -3163,6 +3172,26 @@ async function loadDefaultPool() {
       addToPool(data.reels, data.profile.handle);
     } catch { /* skip creators that fail to load */ }
   }
+  syncTrackedLoadMore();
+}
+
+// Exactly one tracked creator checked (and "show all" off) means the pool
+// is just their history — same shape as a search result — so "Load more"
+// should work here too, not just after typing into the search box. With
+// 0 or 2+ checked, "load more from whom?" is ambiguous, so it stays hidden.
+// Never called while a search is active (every caller exits search first),
+// so it's always safe to own currentHandle/hasMore outright here.
+function syncTrackedLoadMore() {
+  if (state.showAllTracked || state.checkedHandles.size !== 1) {
+    state.currentHandle = null;
+    state.hasMore = false;
+  } else {
+    const [handle] = state.checkedHandles;
+    state.currentHandle = handle;
+    state.currentLimit = 60; // matches the no-limit fetch above, which inherits the server's REELS_LIMIT
+    state.hasMore = state.creatorHasMore.get(handle) ?? false;
+  }
+  renderResults();
 }
 
 $('show-all-toggle').addEventListener('change', (e) => {
@@ -3230,6 +3259,7 @@ function renderManageMatrix() {
       await fetchJSON('/api/bookmarks', { method: 'POST', body: { handle, action: 'remove' } });
       state.checkedHandles.delete(handle);
       removeFromPoolByHandle(handle);
+      syncTrackedLoadMore();
       await loadTrackedCategories();
       renderManageMatrix();
     });
