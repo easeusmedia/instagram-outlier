@@ -933,10 +933,47 @@ function fmtNum(n) {
 // grid shows 28.9M) — and that gap isn't visible through any public
 // scraping route, ours or anyone else's. Flag it so the number reads as
 // "at least this many", not "exactly this many".
-function sponsoredNote(v) {
+function sponsoredNote(v, handle) {
   if (!v.paidPartnership) return '';
-  return ` <span class="sponsored-tag" title="Sponsored/branded content — Instagram includes paid ad reach in its own view count for posts like this, which no public scraper can see. This number is a verified floor, not the true total.">Sponsored</span>`;
+  handle = handle || v.handle || '';
+  const title = v.manualViews != null
+    ? 'Sponsored/branded content — this number was entered by hand after checking Instagram directly (the real total, not scraped). Click to update it.'
+    : 'Sponsored/branded content — Instagram includes paid ad reach in its own view count for posts like this, which no public scraper can see. This is a verified floor, not the true total. Click to enter the real number if you\'ve checked Instagram directly.';
+  return ` <span class="sponsored-tag" data-handle="${escapeHtml(handle)}" data-shortcode="${escapeHtml(v.shortCode || '')}" title="${title}">${v.manualViews != null ? 'Sponsored ✓' : 'Sponsored'}</span>`;
 }
+// Only the account owner can see a sponsored post's real (ad-inclusive) view
+// count on Instagram's own dashboard — no scraper can fetch it. If someone
+// here has actually checked it there, this lets them enter it once so the
+// app treats it as authoritative from then on (including for outlier
+// scoring) instead of living with the scraped floor forever. Delegated on
+// document since cards are rebuilt on every render — a per-card listener
+// would need rewiring every time.
+document.addEventListener('click', async (e) => {
+  const tag = e.target.closest('.sponsored-tag');
+  if (!tag) return;
+  e.stopPropagation();
+  const handle = tag.dataset.handle;
+  const shortCode = tag.dataset.shortcode;
+  const input = prompt(`Enter the real view count for @${handle}'s reel, as shown on Instagram itself:`);
+  if (input == null) return;
+  const views = Number(input.replace(/[,\s]/g, ''));
+  if (!Number.isFinite(views) || views < 0) { alert('Enter a plain number, e.g. 28900000'); return; }
+  try {
+    await fetchJSON('/api/reel-override', { method: 'POST', body: { handle, shortCode, views } });
+  } catch (err) {
+    alert(err.message);
+    return;
+  }
+  // Re-pull so the corrected number (and its ripple effect on every outlier
+  // score for that creator) shows immediately — cache-hit, no Apify call,
+  // since it's already deep enough on disk. Refreshes whichever tab(s)
+  // actually have this creator's data loaded.
+  const limit = state.currentHandle === handle ? state.addReelsLimit : (state.cache[handle]?.reels?.length || REELS_BATCH);
+  const data = await fetchJSON(`/api/creator?input=${encodeURIComponent(handle)}&limit=${limit}`);
+  state.cache[handle] = { ...(state.cache[handle] || {}), profile: data.profile, reels: data.reels };
+  if (state.currentHandle === handle) { state.addReels = data.reels; renderAddFeed(); }
+  if ($('tab-videos').classList.contains('active')) renderVideosFeed();
+});
 
 function fmtDuration(s) {
   if (s == null) return '—';
@@ -1527,7 +1564,7 @@ function buildReelCard(reel, handle) {
     <div class="body">
       <a class="handle" href="https://instagram.com/${encodeURIComponent(handle)}" target="_blank" rel="noopener">@${escapeHtml(handle)}</a>
       <div class="stats">
-        <span>${fmtNum(reel.views)} views${sponsoredNote(reel)}</span>
+        <span>${fmtNum(reel.views)} views${sponsoredNote(reel, handle)}</span>
         <span>${fmtDuration(reel.duration)}</span>
         <span>${reel.timestamp ? new Date(reel.timestamp).toLocaleDateString() : '—'}</span>
       </div>

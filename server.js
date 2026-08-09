@@ -579,6 +579,13 @@ function normalizeReelItem(it) {
     // to mark affected reels as a floor rather than silently understating
     // them as exact.
     paidPartnership: it.paidPartnership === true,
+    // A user who's checked the real number on Instagram directly (the
+    // account owner's own view, not obtainable via any scraper) can enter
+    // it via POST /api/reel-override. null until someone does. mergeReels
+    // below is what keeps this alive across every future re-scrape —
+    // without that, the next weekly refresh would silently wipe it back
+    // down to the scraped floor.
+    manualViews: null,
   };
 }
 
@@ -613,7 +620,17 @@ function mergeReels(cachedNormalized, freshRawItems) {
   const byCode = new Map(cachedNormalized.map((r) => [r.shortCode, r]));
   freshRawItems.map(normalizeReelItem).forEach((r) => {
     const existing = byCode.get(r.shortCode);
-    byCode.set(r.shortCode, { ...r, transcript: r.transcript || existing?.transcript || null });
+    const manualViews = existing?.manualViews ?? null;
+    byCode.set(r.shortCode, {
+      ...r,
+      transcript: r.transcript || existing?.transcript || null,
+      // A manual override always wins over whatever the scraper found —
+      // that's the whole point of it (see normalizeReelItem) — so it has
+      // to survive every future re-scrape, not just be set once and lost
+      // on the next weekly refresh.
+      manualViews,
+      views: manualViews ?? r.views,
+    });
   });
   const merged = [...byCode.values()].sort(
     (a, b) => new Date(b.timestamp || 0) - new Date(a.timestamp || 0)
@@ -941,11 +958,38 @@ app.get('/api/reel-stats', async (req, res) => {
       if (!reels) continue;
       stats[handle] = {};
       for (const r of reels) {
-        stats[handle][r.shortCode] = { views: r.views, outlierScore: r.outlierScore, likes: r.likes, paidPartnership: r.paidPartnership };
+        stats[handle][r.shortCode] = { views: r.views, outlierScore: r.outlierScore, likes: r.likes, paidPartnership: r.paidPartnership, manualViews: r.manualViews };
       }
       refreshCreatorInBackground(handle, reels, reels.length);
     }
     res.json({ stats });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: err.message || 'Something went wrong.' });
+  }
+});
+
+// Lets someone who's checked a sponsored reel's real view count directly on
+// Instagram (only visible to the account owner — see paidPartnership on
+// normalizeReelItem) enter it here instead of living with our scraped
+// floor forever. Recomputes outlier scores for the whole creator immediately
+// since the median it's judged against just moved. mergeReels is what
+// keeps this alive across every future re-scrape.
+app.post('/api/reel-override', async (req, res) => {
+  try {
+    const handle = String(req.body.handle || '').toLowerCase();
+    const shortCode = String(req.body.shortCode || '');
+    const views = Number(req.body.views);
+    if (!handle || !shortCode || !Number.isFinite(views) || views < 0) {
+      return res.status(400).json({ error: 'handle, shortCode, and a non-negative views number are required.' });
+    }
+    const reels = await getCreatorReels(handle);
+    const reel = reels?.find((r) => r.shortCode === shortCode);
+    if (!reel) return res.status(404).json({ error: 'That reel is not cached for this creator yet.' });
+    reel.manualViews = views;
+    reel.views = views;
+    await upsertReels(handle, computeOutlierScores(reels));
+    res.json({ ok: true });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: err.message || 'Something went wrong.' });
