@@ -1807,7 +1807,7 @@ async function refreshCanvasStatsFromCache() {
   Object.entries(data).forEach(([id, n]) => {
     if (n.class === 'video-node') {
       const fresh = stats[n.data.handle]?.[n.data.shortCode];
-      if (fresh && (fresh.views !== n.data.views || fresh.outlierScore !== n.data.outlierScore)) {
+      if (fresh && (fresh.views !== n.data.views || fresh.outlierScore !== n.data.outlierScore || fresh.paidPartnership !== n.data.paidPartnership)) {
         state.editor.updateNodeDataFromId(Number(id), { ...n.data, ...fresh });
         touched.add(Number(id));
       }
@@ -1815,7 +1815,7 @@ async function refreshCanvasStatsFromCache() {
       let changed = false;
       const videos = n.data.videos.map((v) => {
         const fresh = stats[v.handle]?.[v.shortCode];
-        if (fresh && (fresh.views !== v.views || fresh.outlierScore !== v.outlierScore)) { changed = true; return { ...v, ...fresh }; }
+        if (fresh && (fresh.views !== v.views || fresh.outlierScore !== v.outlierScore || fresh.paidPartnership !== v.paidPartnership)) { changed = true; return { ...v, ...fresh }; }
         return v;
       });
       if (changed) {

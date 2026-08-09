@@ -941,7 +941,7 @@ app.get('/api/reel-stats', async (req, res) => {
       if (!reels) continue;
       stats[handle] = {};
       for (const r of reels) {
-        stats[handle][r.shortCode] = { views: r.views, outlierScore: r.outlierScore, likes: r.likes };
+        stats[handle][r.shortCode] = { views: r.views, outlierScore: r.outlierScore, likes: r.likes, paidPartnership: r.paidPartnership };
       }
       refreshCreatorInBackground(handle, reels, reels.length);
     }
@@ -1376,6 +1376,25 @@ async function backfillScriptEmbeddings() {
   }
 }
 await backfillScriptEmbeddings();
+
+// Not gated by a settings flag, same reasoning as backfillScriptEmbeddings
+// above: any reel cached before the paidPartnership field was added to
+// normalizeReelItem is just missing the key entirely, and a handle whose
+// scraper re-run happens to skip that exact reel (confirmed real —
+// Apify's pagination isn't fully deterministic run-to-run) can stay stuck
+// that way indefinitely, silently never showing the "Sponsored" caveat on
+// a reel that needs it. Defaulting the missing key to false is the only
+// safe guess without re-fetching; a caption-verified true is corrected by
+// hand once discovered, same as the DVhB8rMjp1m case that surfaced this.
+async function backfillPaidPartnershipFlag() {
+  const rows = await queryAll('SELECT handle, data FROM reels');
+  for (const row of rows) {
+    const reels = JSON.parse(row.data);
+    if (reels.every((r) => 'paidPartnership' in r)) continue;
+    await upsertReels(row.handle, reels.map((r) => ({ paidPartnership: false, ...r })));
+  }
+}
+await backfillPaidPartnershipFlag();
 
 app.listen(PORT, () => {
   console.log(`Kompass running at http://localhost:${PORT}`);
