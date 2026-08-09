@@ -1254,25 +1254,31 @@ app.delete('/api/settings/llm', async (req, res) => {
 });
 
 // Shared by the global Script Genie (v0, pulls from the scripts table) and
-// the v1 canvas (generates from whatever's connected to a chat node) — same
-// LLM call, different source for which transcripts go in.
-async function callLlmForScript(items, prompt) {
+// the v1 canvas AI Assistant (a real multi-turn chat now, not a one-shot
+// generate) — same LLM call either way, just a growing message list
+// instead of always exactly one. `items` (connected video/script
+// transcripts) only ever gets folded into the *first* message — by the
+// time there's a second turn, that context is already part of the
+// conversation history the model is holding, so re-injecting it on every
+// follow-up would just duplicate it.
+async function callLlmForScript(items, messages) {
   const settings = await getLlmSettings();
   if (!settings.apiKey) throw new Error('Add an LLM API key in Settings first.');
-  if (!items.length) throw new Error('Nothing to generate from yet.');
+  if (!items.length && !messages.some((m) => m.content?.trim())) throw new Error('Nothing to generate from yet.');
   const scriptsBlock = items
     .map((s, i) => `--- Script ${i + 1} (@${s.handle || 'unknown'}) ---\n${s.content}`)
     .join('\n\n');
-  const userContent = prompt ? `${scriptsBlock}\n\n--- Instructions ---\n${prompt}` : scriptsBlock;
+  const chatMessages = messages.map((m, i) => (
+    i === 0 && scriptsBlock
+      ? { role: m.role, content: m.content ? `${scriptsBlock}\n\n--- Instructions ---\n${m.content}` : scriptsBlock }
+      : m
+  ));
   const resp = await fetch(`${settings.baseUrl.replace(/\/$/, '')}/chat/completions`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${settings.apiKey}` },
     body: JSON.stringify({
       model: settings.model,
-      messages: [
-        { role: 'system', content: SCRIPT_SYSTEM_PROMPT },
-        { role: 'user', content: userContent },
-      ],
+      messages: [{ role: 'system', content: SCRIPT_SYSTEM_PROMPT }, ...chatMessages],
     }),
   });
   const data = await resp.json();
@@ -1283,10 +1289,16 @@ async function callLlmForScript(items, prompt) {
 }
 
 app.post('/api/generate-script', async (req, res) => {
-  const prompt = (req.body && req.body.prompt) || '';
   const items = req.body && Array.isArray(req.body.items) ? req.body.items : await listScripts();
+  // `messages` is the new multi-turn shape from v1's chat redesign;
+  // anything still sending the old one-shot `{prompt}` (the base app's
+  // Script Genie) gets wrapped into an equivalent single-message list so
+  // callLlmForScript only ever has one shape to deal with.
+  const messages = req.body && Array.isArray(req.body.messages) && req.body.messages.length
+    ? req.body.messages
+    : [{ role: 'user', content: (req.body && req.body.prompt) || '' }];
   try {
-    const script = await callLlmForScript(items, prompt);
+    const script = await callLlmForScript(items, messages);
     res.json({ script });
   } catch (err) {
     res.status(400).json({ error: err.message || 'Could not reach the LLM provider.' });

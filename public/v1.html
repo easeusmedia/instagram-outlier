@@ -557,12 +557,36 @@
     display: flex; align-items: center; justify-content: center; flex-shrink: 0;
   }
   .chat-node .attached .chip .chip-x:hover { background: rgba(255,107,107,0.18); color: var(--danger); }
-  .chat-node textarea { min-height: 60px; resize: vertical; }
-  .chat-node .output-box { min-height: 100px; max-height: 260px; overflow-y: auto; background: rgba(255,255,255,0.035); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 11px; font-size: 12px; line-height: 1.6; color: var(--text-dim); white-space: pre-wrap; }
-  .chat-node .row { display: flex; gap: 8px; }
-  .chat-node .row button { flex: 1; }
+  /* Empty state (no messages yet) collapses to nothing instead of an empty
+     scroll box with visible padding — the input row alone is the "start
+     typing" affordance. */
+  .chat-node .chat-messages {
+    display: flex; flex-direction: column; gap: 12px;
+    max-height: 320px; overflow-y: auto;
+  }
+  .chat-node .chat-messages:empty { display: none; }
+  .chat-node .chat-msg-role {
+    display: flex; align-items: center; gap: 6px; font-size: 10px; font-weight: 600;
+    text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-faint); margin-bottom: 4px;
+  }
+  .chat-node .chat-msg-user .chat-msg-role { color: var(--accent); }
+  .chat-node .chat-msg-content { font-size: 12px; line-height: 1.6; color: var(--text-dim); white-space: pre-wrap; }
+  .chat-node .chat-msg-copy {
+    width: 16px; height: 16px; border-radius: 4px; border: none; background: transparent; color: var(--text-faint);
+    display: inline-flex; align-items: center; justify-content: center; cursor: pointer;
+  }
+  .chat-node .chat-msg-copy:hover { background: var(--surface); color: var(--text-dim); }
+  .chat-node .chat-attachments-staged { display: flex; flex-wrap: wrap; gap: 6px; }
+  .chat-node .chat-attachments-staged:empty { display: none; }
   .chat-node .status { font-size: 11px; color: var(--text-faint); min-height: 14px; }
   .chat-node .status.error { color: var(--danger); }
+  .chat-node .chat-input-row { display: flex; align-items: flex-end; gap: 6px; }
+  .chat-node .chat-input {
+    flex: 1; min-height: 34px; max-height: 120px; resize: none; overflow-y: auto;
+    padding: 8px 10px; line-height: 1.4;
+  }
+  .chat-node .chat-attach-btn, .chat-node .chat-send-btn { flex-shrink: 0; margin-bottom: 1px; }
+  .chat-node .chat-send-btn:disabled { opacity: 0.5; cursor: default; }
 
   /* --- bottom toolbar ----------------------------------------------- */
   /* Fixed to the viewport (not #drawflow) so toggling the right panel —
@@ -923,6 +947,10 @@ const ICONS = {
   pause: '<rect x="6" y="4" width="4" height="16" fill="currentColor" stroke="none"/><rect x="14" y="4" width="4" height="16" fill="currentColor" stroke="none"/>',
   cursor: '<path d="M5 3l14 6-6 2-2 6-6-14z" fill="currentColor" stroke="none"/>',
   frame: '<path d="M8 3v18M16 3v18M3 8h18M3 16h18" stroke="currentColor" fill="none"/>',
+  send: '<line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2" fill="currentColor"/>',
+  attach: '<path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/>',
+  copy: '<rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>',
+  check: '<polyline points="20 6 9 17 4 12"/>',
 };
 function icon(name, { size = 16 } = {}) {
   return `<svg class="icon" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">${ICONS[name]}</svg>`;
@@ -1530,22 +1558,63 @@ function wireScriptNode(nodeId) {
   wireRemove(nodeId, el);
 }
 
-// data.prompt/data.output persist across reloads AND make this node's own
-// generated script available as an input to a *downstream* chat node —
-// that's what lets one AI Assistant chain into another.
+// Normalizes a chat-node's conversation regardless of which shape it was
+// saved in — old spaces (before this redesign) stored a single
+// {prompt, output} pair, not a running message list. Everything that reads
+// a chat-node's conversation (rendering, chaining into a downstream chat
+// node) goes through this so the rest of the code never has to care which
+// shape a given node happened to be saved in.
+function chatMessages(data) {
+  if (data.messages) return data.messages;
+  if (data.output) return [
+    { role: 'user', content: data.prompt || '' },
+    { role: 'assistant', content: data.output },
+  ];
+  return [];
+}
+// What a *downstream* chat node actually chains off of — always the most
+// recent reply in the conversation, so refining a script and then feeding
+// it into another AI Assistant picks up the refined version, not whatever
+// the first draft happened to be.
+function lastAssistantMessage(data) {
+  const messages = chatMessages(data);
+  for (let i = messages.length - 1; i >= 0; i--) {
+    if (messages[i].role === 'assistant') return messages[i].content;
+  }
+  return null;
+}
+function chatMessageHtml(m) {
+  const isUser = m.role === 'user';
+  return `
+    <div class="chat-msg ${isUser ? 'chat-msg-user' : 'chat-msg-assistant'}">
+      <div class="chat-msg-role">${isUser ? 'You' : 'AI Assistant'}${isUser ? '' : ` <button class="chat-msg-copy" title="Copy">${icon('copy', { size: 10 })}</button>`}</div>
+      <div class="chat-msg-content">${escapeHtml(m.content)}</div>
+    </div>
+  `;
+}
+// A real back-and-forth instead of a single generate-once box: the running
+// conversation persists in data.messages (survives reload, and is what a
+// *downstream* chat node chains off of — always its latest assistant
+// reply, not whatever the first one happened to be). Connected
+// videos/scripts only ever get folded in on the very first message; by the
+// second turn that context is already part of the conversation history.
 function buildChatNodeHtml(data = {}) {
-  const hasOutput = !!data.output;
+  const messages = chatMessages(data);
   return `
     <div class="chat-node node-card">
       <button class="icon-btn tiny node-remove" title="Remove">${icon('close', { size: 11 })}</button>
       <div class="head">${icon('sparkle', { size: 15 })} AI Assistant</div>
       <div class="body">
         <div class="attached" style="display:none"></div>
-        <textarea placeholder="What do you want it to write? (optional)" class="chat-prompt">${escapeHtml(data.prompt || '')}</textarea>
-        <div class="row"><button class="primary chat-generate">Generate Script</button></div>
+        <div class="chat-messages">${messages.map(chatMessageHtml).join('')}</div>
+        <div class="chat-attachments-staged"></div>
         <div class="status chat-status"></div>
-        <div class="output-box chat-output" style="${hasOutput ? '' : 'display:none'}">${escapeHtml(data.output || '')}</div>
-        <div class="row chat-output-actions" style="${hasOutput ? 'display:flex' : 'display:none'}"><button class="secondary chat-copy">Copy</button></div>
+        <div class="chat-input-row">
+          <button class="icon-btn tiny chat-attach-btn" title="Attach a file">${icon('attach', { size: 14 })}</button>
+          <input type="file" class="chat-file-input" style="display:none" multiple />
+          <textarea class="chat-input" placeholder="${messages.length ? 'Ask for changes…' : 'Write a script, or ask anything…'}" rows="1"></textarea>
+          <button class="icon-btn tiny chat-send-btn" title="Send">${icon('send', { size: 13 })}</button>
+        </div>
       </div>
     </div>
   `;
@@ -1591,7 +1660,8 @@ async function collectConnectedItems(chatNodeId, statusEl) {
     } else if (node.class === 'script-node') {
       items.push({ shortCode: node.data.shortCode, handle: node.data.handle, content: node.data.content });
     } else if (node.class === 'chat-node') {
-      if (node.data.output) items.push({ shortCode: null, handle: 'previous-ai-output', content: node.data.output });
+      const reply = lastAssistantMessage(node.data);
+      if (reply) items.push({ shortCode: null, handle: 'previous-ai-output', content: reply });
     }
   }
   return items;
@@ -1629,7 +1699,10 @@ function describeChatInputs(chatNodeId) {
     } else if (src.class === 'script-node') {
       entries.push({ label: `@${src.data.handle}`, ready: true, content: () => src.data.content, disconnect });
     } else if (src.class === 'chat-node') {
-      entries.push({ label: 'Prior AI output', ready: !!src.data.output, content: () => src.data.output, disconnect });
+      // Always the *latest* reply, not whichever one happened to be first
+      // — re-evaluated fresh (not memoized) so a downstream node picks up
+      // a further-refined answer without needing to reconnect.
+      entries.push({ label: 'Prior AI output', ready: !!lastAssistantMessage(src.data), content: () => lastAssistantMessage(editor.drawflow.drawflow.Home.data[conn.node].data), disconnect });
     }
   });
   return entries;
@@ -1667,56 +1740,124 @@ function wireChatNode(nodeId) {
   if (!el || el.dataset.wired) return;
   el.dataset.wired = '1';
   wireRemove(nodeId, el);
-  const promptEl = el.querySelector('.chat-prompt');
+  const messagesEl = el.querySelector('.chat-messages');
+  const stagedEl = el.querySelector('.chat-attachments-staged');
   const statusEl = el.querySelector('.chat-status');
-  const outputEl = el.querySelector('.chat-output');
-  const copyBtn = el.querySelector('.chat-copy');
-  const genBtn = el.querySelector('.chat-generate');
-  preventNodeDrag(promptEl);
-  preventNodeDrag(genBtn);
-  preventNodeDrag(copyBtn);
+  const inputEl = el.querySelector('.chat-input');
+  const sendBtn = el.querySelector('.chat-send-btn');
+  const attachBtn = el.querySelector('.chat-attach-btn');
+  const fileInput = el.querySelector('.chat-file-input');
+  preventNodeDrag(inputEl);
+  preventNodeDrag(sendBtn);
+  preventNodeDrag(attachBtn);
+  preventNodeDrag(messagesEl);
   preventNodeDrag(el.querySelector('.attached'));
 
-  genBtn.addEventListener('click', async () => {
+  // Auto-grow instead of a fixed box that's either empty-and-wasteful or
+  // clips a longer follow-up ("make it 30 seconds and add a stronger
+  // hook..."). Capped by max-height/overflow in CSS so a really long
+  // paste doesn't take over the node.
+  inputEl.addEventListener('input', () => {
+    inputEl.style.height = 'auto';
+    inputEl.style.height = `${inputEl.scrollHeight}px`;
+  });
+  inputEl.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendBtn.click(); }
+  });
+
+  // Files are read as plain text and folded straight into the outgoing
+  // message — there's no vision model wired up here, so this only makes
+  // sense for actual text (a reference script, notes, a transcript someone
+  // already has). Kept in a closure-local array, not node data: these are
+  // just staged for the *next* send, not part of the saved conversation.
+  let staged = [];
+  function renderStaged() {
+    stagedEl.innerHTML = staged.map((f, i) => `
+      <span class="chip ready">${icon('attach', { size: 9 })}${escapeHtml(f.name)}<button class="chip-x" data-idx="${i}" title="Remove">${icon('close', { size: 9 })}</button></span>
+    `).join('');
+  }
+  stagedEl.addEventListener('click', (e) => {
+    const btn = e.target.closest('.chip-x');
+    if (!btn) return;
+    staged.splice(Number(btn.dataset.idx), 1);
+    renderStaged();
+  });
+  attachBtn.addEventListener('click', () => fileInput.click());
+  fileInput.addEventListener('change', async () => {
+    for (const file of fileInput.files) {
+      try { staged.push({ name: file.name, content: await file.text() }); }
+      catch { /* one unreadable file shouldn't block attaching the rest */ }
+    }
+    fileInput.value = '';
+    renderStaged();
+  });
+
+  // Delegated, not per-message: messages are re-rendered wholesale on
+  // every send, so a listener attached to an individual copy button would
+  // just be thrown away the next time this fires.
+  messagesEl.addEventListener('click', (e) => {
+    const btn = e.target.closest('.chat-msg-copy');
+    if (!btn) return;
+    const text = btn.closest('.chat-msg').querySelector('.chat-msg-content').textContent;
+    navigator.clipboard.writeText(text);
+    const original = btn.innerHTML;
+    btn.innerHTML = icon('check', { size: 10 });
+    setTimeout(() => { btn.innerHTML = original; }, 900);
+  });
+
+  async function send() {
+    const text = inputEl.value.trim();
+    if (!text && !staged.length) return;
     statusEl.textContent = '';
     statusEl.classList.remove('error');
-    const connections = state.editor.drawflow.drawflow.Home.data[nodeId].inputs.input_1?.connections || [];
-    if (!connections.length) {
-      statusEl.textContent = 'Connect at least one video or group to this node first.';
-      statusEl.classList.add('error');
-      return;
-    }
-    genBtn.disabled = true;
-    genBtn.textContent = 'Generating…';
+    const curData = state.editor.drawflow.drawflow.Home.data[nodeId].data;
+    const priorMessages = chatMessages(curData);
+    const attachmentsBlock = staged.map((f) => `--- Attached file: ${f.name} ---\n${f.content}`).join('\n\n');
+    const content = [text, attachmentsBlock].filter(Boolean).join('\n\n');
+    const messages = [...priorMessages, { role: 'user', content }];
+
+    // Optimistic render: the user's own message shows immediately, input
+    // clears, staged files clear — waiting on the LLM only blocks the
+    // reply, not the sense that sending did something.
+    state.editor.updateNodeDataFromId(nodeId, { ...curData, messages });
+    messagesEl.innerHTML = messages.map(chatMessageHtml).join('');
+    messagesEl.scrollTop = messagesEl.scrollHeight;
+    inputEl.value = '';
+    inputEl.style.height = 'auto';
+    staged = [];
+    renderStaged();
+    sendBtn.disabled = true;
     try {
-      const items = await collectConnectedItems(nodeId, statusEl);
-      if (!items.length) throw new Error('Could not fetch a transcript for anything connected.');
-      statusEl.textContent = 'Generating script…';
-      const { script } = await fetchJSON('/api/generate-script', { method: 'POST', body: { prompt: promptEl.value.trim(), items } });
-      outputEl.textContent = script;
-      outputEl.style.display = 'block';
-      copyBtn.parentElement.style.display = 'flex';
+      // Connected sources only ever get read on the conversation's first
+      // message — by the second turn, that context already lives in the
+      // message history being sent, so re-fetching (and re-injecting)
+      // every single turn would just duplicate it.
+      let items = [];
+      if (priorMessages.length === 0) {
+        const connections = state.editor.drawflow.drawflow.Home.data[nodeId].inputs.input_1?.connections || [];
+        if (connections.length) {
+          statusEl.textContent = 'Reading connected sources…';
+          items = await collectConnectedItems(nodeId, statusEl);
+        }
+      }
+      statusEl.textContent = 'Thinking…';
+      const { script } = await fetchJSON('/api/generate-script', { method: 'POST', body: { items, messages } });
+      const finalMessages = [...messages, { role: 'assistant', content: script }];
+      const latest = state.editor.drawflow.drawflow.Home.data[nodeId].data;
+      state.editor.updateNodeDataFromId(nodeId, { ...latest, messages: finalMessages });
+      messagesEl.innerHTML = finalMessages.map(chatMessageHtml).join('');
+      messagesEl.scrollTop = messagesEl.scrollHeight;
       statusEl.textContent = '';
-      // Persist into node data (survives reload) and as the content a
-      // downstream chat-node can chain off of.
-      const curData = state.editor.drawflow.drawflow.Home.data[nodeId].data;
-      state.editor.updateNodeDataFromId(nodeId, { ...curData, prompt: promptEl.value.trim(), output: script });
       saveCanvasState();
-      refreshAllChatAttachments();
+      refreshAllChatAttachments(); // a downstream chat node's "Prior AI output" chip just changed
     } catch (err) {
       statusEl.textContent = err.message;
       statusEl.classList.add('error');
     } finally {
-      genBtn.disabled = false;
-      genBtn.textContent = 'Generate Script';
+      sendBtn.disabled = false;
     }
-  });
-
-  copyBtn.addEventListener('click', () => {
-    navigator.clipboard.writeText(outputEl.textContent);
-    copyBtn.textContent = 'Copied!';
-    setTimeout(() => { copyBtn.textContent = 'Copy'; }, 1200);
-  });
+  }
+  sendBtn.addEventListener('click', send);
 
   refreshChatAttachments(nodeId);
 }
