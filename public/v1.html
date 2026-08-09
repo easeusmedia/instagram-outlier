@@ -1786,7 +1786,10 @@ function wireChatNode(nodeId) {
     staged.splice(Number(btn.dataset.idx), 1);
     renderStaged();
   });
-  attachBtn.addEventListener('click', () => fileInput.click());
+  attachBtn.addEventListener('click', () => {
+    window.beforeFullscreenFilePick?.(); // hop back into fullscreen once the native picker closes, if we were in it
+    fileInput.click();
+  });
   fileInput.addEventListener('change', async () => {
     for (const file of fileInput.files) {
       try { staged.push({ name: file.name, content: await file.text() }); }
@@ -2522,6 +2525,27 @@ function initEditor() {
     $('fullscreen-btn').innerHTML = icon(document.fullscreenElement ? 'shrink' : 'expand', { size: 14 });
     document.body.classList.toggle('is-fullscreen', !!document.fullscreenElement);
   });
+
+  // Every browser force-exits the Fullscreen API the instant a native OS
+  // dialog opens on top of it (the file picker included) — that's the
+  // browser's own security/UX rule, not something a page can opt out of.
+  // The best a page can do is notice the exit was caused by *our* dialog
+  // and hop straight back into fullscreen once the user's done with it —
+  // 'focus' fires on both "picked a file" and "cancelled", so it covers
+  // either outcome. window.beforeFullscreenFilePick() below wraps any
+  // fileInput.click() that might fire mid-fullscreen.
+  window.beforeFullscreenFilePick = () => {
+    if (!document.fullscreenElement) return;
+    window.addEventListener('focus', function restore() {
+      window.removeEventListener('focus', restore);
+      // A tick for the OS dialog to actually finish tearing down — calling
+      // requestFullscreen() while it's still mid-close is what silently
+      // no-ops in some browsers.
+      setTimeout(() => {
+        if (!document.fullscreenElement) document.documentElement.requestFullscreen().catch(() => {});
+      }, 60);
+    }, { once: true });
+  };
 
   container.addEventListener('dragover', (e) => e.preventDefault());
   container.addEventListener('drop', (e) => {
