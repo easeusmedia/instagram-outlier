@@ -172,6 +172,20 @@ await run(`CREATE TABLE IF NOT EXISTS creator_checks (handle TEXT PRIMARY KEY, c
 // v1 canvas: a "space" is one named Drawflow board. canvas_state is
 // whatever editor.export() produced last, saved back verbatim.
 await run(`CREATE TABLE IF NOT EXISTS spaces (id SERIAL PRIMARY KEY, name TEXT NOT NULL, canvas_state TEXT, created_at TEXT)`);
+// Each v1 space gets its own independent tracked-creator list instead of
+// sharing one global pool — without this, a brand new space (or someone
+// else's space) showed every creator ever tracked anywhere. space_id 0
+// means "no space" — the base app (public/index.html), which has no space
+// concept at all, keeps behaving exactly as it always has, unscoped.
+// Dropping+re-adding the PK on every boot is wasteful but harmless at this
+// table size, and far simpler than a one-time-only guard.
+await run(`ALTER TABLE bookmarks ADD COLUMN IF NOT EXISTS space_id INTEGER NOT NULL DEFAULT 0`);
+await run(`ALTER TABLE bookmarks DROP CONSTRAINT IF EXISTS bookmarks_pkey`);
+await run(`ALTER TABLE bookmarks ADD PRIMARY KEY (space_id, handle)`);
+await run(`ALTER TABLE bookmark_categories ADD COLUMN IF NOT EXISTS space_id INTEGER NOT NULL DEFAULT 0`);
+await run(`ALTER TABLE bookmark_categories DROP CONSTRAINT IF EXISTS bookmark_categories_pkey`);
+await run(`ALTER TABLE bookmark_categories ADD PRIMARY KEY (space_id, handle, category_id)`);
+await run(`ALTER TABLE creator_categories ADD COLUMN IF NOT EXISTS space_id INTEGER NOT NULL DEFAULT 0`);
 await run(`CREATE TABLE IF NOT EXISTS users (id SERIAL PRIMARY KEY, email TEXT UNIQUE NOT NULL, password_hash TEXT NOT NULL, is_admin BOOLEAN NOT NULL DEFAULT FALSE, created_at TEXT NOT NULL)`);
 // Added after the table already existed in production — ADD COLUMN IF NOT
 // EXISTS patches it in place instead of needing a separate migration flag.
@@ -251,14 +265,19 @@ async function upsertReels(handle, reels) {
   );
 }
 
-async function isBookmarked(handle) {
-  return !!(await queryOne('SELECT 1 FROM bookmarks WHERE handle = ?', [handle]));
+// spaceId defaults to 0 everywhere below — the base app (public/index.html)
+// has no concept of spaces at all and never passes one, so it always reads
+// and writes the space_id=0 bucket, unchanged from before this existed.
+// Each v1 space passes its own real id, keeping its tracked creators and
+// categories independent of every other space.
+async function isBookmarked(handle, spaceId = 0) {
+  return !!(await queryOne('SELECT 1 FROM bookmarks WHERE handle = ? AND space_id = ?', [handle, spaceId]));
 }
 
-async function listBookmarks() {
+async function listBookmarks(spaceId = 0) {
   const [rows, catRows] = await Promise.all([
-    queryAll('SELECT handle, added_at FROM bookmarks ORDER BY added_at'),
-    queryAll('SELECT handle, category_id FROM bookmark_categories ORDER BY category_id'),
+    queryAll('SELECT handle, added_at FROM bookmarks WHERE space_id = ? ORDER BY added_at', [spaceId]),
+    queryAll('SELECT handle, category_id FROM bookmark_categories WHERE space_id = ? ORDER BY category_id', [spaceId]),
   ]);
   const catsByHandle = new Map();
   for (const r of catRows) {
@@ -281,53 +300,59 @@ async function listBookmarks() {
 
 // Keeps bookmarks.category_id (the base app's single-category column) equal
 // to the lowest id in bookmark_categories, so nothing there needs to change.
-async function syncPrimaryCategoryColumn(handle) {
-  const row = await queryOne('SELECT MIN(category_id) AS id FROM bookmark_categories WHERE handle = ?', [handle]);
-  await run('UPDATE bookmarks SET category_id = ? WHERE handle = ?', [row?.id ?? null, handle]);
+async function syncPrimaryCategoryColumn(handle, spaceId = 0) {
+  const row = await queryOne('SELECT MIN(category_id) AS id FROM bookmark_categories WHERE handle = ? AND space_id = ?', [handle, spaceId]);
+  await run('UPDATE bookmarks SET category_id = ? WHERE handle = ? AND space_id = ?', [row?.id ?? null, handle, spaceId]);
 }
 
 // Replaces a creator's category membership with exactly one category — this
 // is what the base app's drag-and-drop ("move this chip to that section")
 // UI calls, so it keeps that replace-not-add semantics.
-async function setBookmarkCategory(handle, categoryId) {
-  await run('DELETE FROM bookmark_categories WHERE handle = ?', [handle]);
-  if (categoryId != null) await run('INSERT INTO bookmark_categories (handle, category_id) VALUES (?, ?) ON CONFLICT DO NOTHING', [handle, categoryId]);
-  await syncPrimaryCategoryColumn(handle);
+async function setBookmarkCategory(handle, categoryId, spaceId = 0) {
+  await run('DELETE FROM bookmark_categories WHERE handle = ? AND space_id = ?', [handle, spaceId]);
+  if (categoryId != null) await run('INSERT INTO bookmark_categories (handle, category_id, space_id) VALUES (?, ?, ?) ON CONFLICT DO NOTHING', [handle, categoryId, spaceId]);
+  await syncPrimaryCategoryColumn(handle, spaceId);
 }
 
 // Replaces a creator's category membership with an arbitrary set — this is
 // what v1's manage-categories modal uses to put one creator in several
 // categories at once.
-async function setBookmarkCategories(handle, categoryIds) {
-  await run('DELETE FROM bookmark_categories WHERE handle = ?', [handle]);
+async function setBookmarkCategories(handle, categoryIds, spaceId = 0) {
+  await run('DELETE FROM bookmark_categories WHERE handle = ? AND space_id = ?', [handle, spaceId]);
   for (const id of categoryIds) {
-    await run('INSERT INTO bookmark_categories (handle, category_id) VALUES (?, ?) ON CONFLICT DO NOTHING', [handle, id]);
+    await run('INSERT INTO bookmark_categories (handle, category_id, space_id) VALUES (?, ?, ?) ON CONFLICT DO NOTHING', [handle, id, spaceId]);
   }
-  await syncPrimaryCategoryColumn(handle);
+  await syncPrimaryCategoryColumn(handle, spaceId);
 }
 
 // --- creator categories ----------------------------------------------------
+// listCategories/createCategory are also shared with video_categories
+// (which has no space_id column at all — per-video tags aren't spaced),
+// hence the table-name branch instead of just always filtering.
 
-async function listCategories(table) {
-  return queryAll(`SELECT id, name FROM ${table} ORDER BY id`);
+async function listCategories(table, spaceId = 0) {
+  return table === 'creator_categories'
+    ? queryAll(`SELECT id, name FROM ${table} WHERE space_id = ? ORDER BY id`, [spaceId])
+    : queryAll(`SELECT id, name FROM ${table} ORDER BY id`);
 }
 
-async function createCategory(table, name) {
-  await run(`INSERT INTO ${table} (name) VALUES (?)`, [name]);
-  return listCategories(table);
+async function createCategory(table, name, spaceId = 0) {
+  if (table === 'creator_categories') await run(`INSERT INTO ${table} (name, space_id) VALUES (?, ?)`, [name, spaceId]);
+  else await run(`INSERT INTO ${table} (name) VALUES (?)`, [name]);
+  return listCategories(table, spaceId);
 }
 
-async function renameCategory(table, id, name) {
+async function renameCategory(table, id, name, spaceId = 0) {
   await run(`UPDATE ${table} SET name = ? WHERE id = ?`, [name, id]);
-  return listCategories(table);
+  return listCategories(table, spaceId);
 }
 
 async function deleteCreatorCategory(id) {
-  const rows = await queryAll('SELECT handle FROM bookmark_categories WHERE category_id = ?', [id]);
+  const rows = await queryAll('SELECT handle, space_id FROM bookmark_categories WHERE category_id = ?', [id]);
   await run('DELETE FROM bookmark_categories WHERE category_id = ?', [id]);
   await run('UPDATE bookmarks SET category_id = NULL WHERE category_id = ?', [id]);
   await run('DELETE FROM creator_categories WHERE id = ?', [id]);
-  await Promise.all(rows.map((r) => syncPrimaryCategoryColumn(r.handle)));
+  await Promise.all(rows.map((r) => syncPrimaryCategoryColumn(r.handle, r.space_id)));
 }
 
 // --- video categories + per-video bookmarks (independent of creator categories) --
@@ -433,16 +458,16 @@ async function getLlmSettings() {
   };
 }
 
-async function addBookmark(handle) {
+async function addBookmark(handle, spaceId = 0) {
   await run(
-    'INSERT INTO bookmarks (handle, added_at) VALUES (?, ?) ON CONFLICT(handle) DO NOTHING',
-    [handle, new Date().toISOString()]
+    'INSERT INTO bookmarks (handle, added_at, space_id) VALUES (?, ?, ?) ON CONFLICT(space_id, handle) DO NOTHING',
+    [handle, new Date().toISOString(), spaceId]
   );
 }
 
-async function removeBookmark(handle) {
-  await run('DELETE FROM bookmarks WHERE handle = ?', [handle]);
-  await run('DELETE FROM bookmark_categories WHERE handle = ?', [handle]);
+async function removeBookmark(handle, spaceId = 0) {
+  await run('DELETE FROM bookmarks WHERE handle = ? AND space_id = ?', [handle, spaceId]);
+  await run('DELETE FROM bookmark_categories WHERE handle = ? AND space_id = ?', [handle, spaceId]);
 }
 
 async function getCachedTranscript(shortcode) {
@@ -871,7 +896,7 @@ app.get('/api/creator', async (req, res) => {
     // instead, so the response stays instant either way.
 
     const withTranscripts = await attachCachedTranscripts(reels);
-    res.json({ profile, reels: withTranscripts, bookmarked: await isBookmarked(handle), hasMore: withTranscripts.length >= requestedLimit });
+    res.json({ profile, reels: withTranscripts, bookmarked: await isBookmarked(handle, spaceIdOf(req)), hasMore: withTranscripts.length >= requestedLimit });
 
     if (!freshlyScraped && !forceRefresh) {
       refreshCreatorInBackground(handle, reels, requestedLimit);
@@ -979,8 +1004,15 @@ app.get('/api/transcript', async (req, res) => {
   }
 });
 
+// spaceId travels as a query param on GET/DELETE and a body field on
+// POST/PATCH — either way, an absent or non-numeric one reads as 0, the
+// base app's (space-less) bucket.
+function spaceIdOf(req) {
+  return parseInt((req.body && req.body.spaceId) ?? req.query.spaceId, 10) || 0;
+}
+
 app.get('/api/bookmarks', async (req, res) => {
-  res.json({ bookmarks: await listBookmarks() });
+  res.json({ bookmarks: await listBookmarks(spaceIdOf(req)) });
 });
 
 app.post('/api/bookmarks', async (req, res) => {
@@ -988,23 +1020,25 @@ app.post('/api/bookmarks', async (req, res) => {
   if (!handle || !['add', 'remove'].includes(action)) {
     return res.status(400).json({ error: 'handle and action ("add" or "remove") are required.' });
   }
+  const spaceId = spaceIdOf(req);
   const h = handle.toLowerCase();
   if (action === 'add') {
     if (!(await getCreatorProfile(h))) {
       return res.status(400).json({ error: 'Load this creator on the Add tab first, then bookmark it.' });
     }
-    await addBookmark(h);
+    await addBookmark(h, spaceId);
   } else {
-    await removeBookmark(h);
+    await removeBookmark(h, spaceId);
   }
-  res.json({ bookmarks: await listBookmarks() });
+  res.json({ bookmarks: await listBookmarks(spaceId) });
 });
 
 app.post('/api/bookmarks/category', async (req, res) => {
   const { handle, categoryId } = req.body || {};
   if (!handle) return res.status(400).json({ error: 'handle is required.' });
-  await setBookmarkCategory(handle.toLowerCase(), categoryId ?? null);
-  res.json({ bookmarks: await listBookmarks() });
+  const spaceId = spaceIdOf(req);
+  await setBookmarkCategory(handle.toLowerCase(), categoryId ?? null, spaceId);
+  res.json({ bookmarks: await listBookmarks(spaceId) });
 });
 
 // Multi-category variant (v1's manage-categories modal) — sets the full
@@ -1012,8 +1046,9 @@ app.post('/api/bookmarks/category', async (req, res) => {
 app.post('/api/bookmarks/categories', async (req, res) => {
   const { handle, categoryIds } = req.body || {};
   if (!handle || !Array.isArray(categoryIds)) return res.status(400).json({ error: 'handle and categoryIds[] are required.' });
-  await setBookmarkCategories(handle.toLowerCase(), categoryIds.map(Number));
-  res.json({ bookmarks: await listBookmarks() });
+  const spaceId = spaceIdOf(req);
+  await setBookmarkCategories(handle.toLowerCase(), categoryIds.map(Number), spaceId);
+  res.json({ bookmarks: await listBookmarks(spaceId) });
 });
 
 function maskApifyKey(token) {
@@ -1063,24 +1098,25 @@ app.delete('/api/settings/apify-key', async (req, res) => {
 });
 
 app.get('/api/creator-categories', async (req, res) => {
-  res.json({ categories: await listCategories('creator_categories') });
+  res.json({ categories: await listCategories('creator_categories', spaceIdOf(req)) });
 });
 
 app.post('/api/creator-categories', async (req, res) => {
   const name = ((req.body && req.body.name) || '').trim();
   if (!name) return res.status(400).json({ error: 'Category name is required.' });
-  res.json({ categories: await createCategory('creator_categories', name) });
+  res.json({ categories: await createCategory('creator_categories', name, spaceIdOf(req)) });
 });
 
 app.patch('/api/creator-categories/:id', async (req, res) => {
   const name = ((req.body && req.body.name) || '').trim();
   if (!name) return res.status(400).json({ error: 'Category name is required.' });
-  res.json({ categories: await renameCategory('creator_categories', Number(req.params.id), name) });
+  res.json({ categories: await renameCategory('creator_categories', Number(req.params.id), name, spaceIdOf(req)) });
 });
 
 app.delete('/api/creator-categories/:id', async (req, res) => {
+  const spaceId = spaceIdOf(req);
   await deleteCreatorCategory(Number(req.params.id));
-  res.json({ categories: await listCategories('creator_categories'), bookmarks: await listBookmarks() });
+  res.json({ categories: await listCategories('creator_categories', spaceId), bookmarks: await listBookmarks(spaceId) });
 });
 
 app.get('/api/video-categories', async (req, res) => {
@@ -1216,7 +1252,44 @@ app.put('/api/spaces/:id', async (req, res) => {
 });
 
 app.delete('/api/spaces/:id', async (req, res) => {
-  await run('DELETE FROM spaces WHERE id = ?', [Number(req.params.id)]);
+  const id = Number(req.params.id);
+  await run('DELETE FROM spaces WHERE id = ?', [id]);
+  // Tracked creators/categories aren't a foreign key away from spaces (no
+  // cascade), so a deleted space's rows would otherwise sit around forever.
+  await run('DELETE FROM bookmark_categories WHERE space_id = ?', [id]);
+  await run('DELETE FROM bookmarks WHERE space_id = ?', [id]);
+  await run('DELETE FROM creator_categories WHERE space_id = ?', [id]);
+  res.json({ ok: true });
+});
+
+// The one path tracked creators/categories are allowed to move between
+// spaces on — mirrors "Duplicate" copying canvas_state, so a duplicated
+// space starts with the same tracked creators as its source instead of
+// empty (every *other* new space starts empty; see space_id-scoping above).
+async function duplicateSpaceTracking(fromSpaceId, toSpaceId) {
+  const cats = await queryAll('SELECT id, name FROM creator_categories WHERE space_id = ? ORDER BY id', [fromSpaceId]);
+  const idMap = new Map(); // source category id -> its copy's new id
+  for (const c of cats) {
+    const row = await queryOne('INSERT INTO creator_categories (name, space_id) VALUES (?, ?) RETURNING id', [c.name, toSpaceId]);
+    idMap.set(c.id, row.id);
+  }
+  const bookmarks = await queryAll('SELECT handle, added_at FROM bookmarks WHERE space_id = ?', [fromSpaceId]);
+  for (const b of bookmarks) {
+    await run('INSERT INTO bookmarks (handle, added_at, space_id) VALUES (?, ?, ?) ON CONFLICT(space_id, handle) DO NOTHING', [b.handle, b.added_at, toSpaceId]);
+  }
+  const memberships = await queryAll('SELECT handle, category_id FROM bookmark_categories WHERE space_id = ?', [fromSpaceId]);
+  for (const m of memberships) {
+    const newCatId = idMap.get(m.category_id);
+    if (newCatId == null) continue;
+    await run('INSERT INTO bookmark_categories (handle, category_id, space_id) VALUES (?, ?, ?) ON CONFLICT DO NOTHING', [m.handle, newCatId, toSpaceId]);
+  }
+  await Promise.all(bookmarks.map((b) => syncPrimaryCategoryColumn(b.handle, toSpaceId)));
+}
+
+app.post('/api/spaces/:id/duplicate-tracking', async (req, res) => {
+  const toSpaceId = Number(req.body && req.body.intoSpaceId);
+  if (!toSpaceId) return res.status(400).json({ error: 'intoSpaceId is required.' });
+  await duplicateSpaceTracking(Number(req.params.id), toSpaceId);
   res.json({ ok: true });
 });
 
@@ -1376,6 +1449,22 @@ async function migrateViewsMaxFix() {
   await run("INSERT INTO settings (key, value) VALUES ('viewsMigrationV2', '1')");
 }
 await migrateViewsMaxFix();
+
+// One-time: before space-scoped tracking existed, every v1 space shared one
+// global tracked-creator pool — which is exactly the bug being fixed (a
+// brand new space showed every creator ever tracked anywhere). Rather than
+// silently emptying out spaces that already exist, each gets its own copy
+// of today's global (space_id=0) list once, here. Anything from this point
+// on — new spaces, and any bookmark/category change in an existing one —
+// is properly isolated per space (see the space_id columns above), so this
+// never needs to run again.
+async function migrateSpaceScopedTrackingSeed() {
+  if (await queryOne("SELECT value FROM settings WHERE key = 'spaceScopedTrackingSeedV1'")) return;
+  const spaces = await queryAll('SELECT id FROM spaces');
+  for (const s of spaces) await duplicateSpaceTracking(0, s.id);
+  await run("INSERT INTO settings (key, value) VALUES ('spaceScopedTrackingSeedV1', '1')");
+}
+await migrateSpaceScopedTrackingSeed();
 
 // Not gated by a settings flag like the migrations above: the WHERE clause
 // itself is the guard (only ever touches rows still missing an embedding),

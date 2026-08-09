@@ -1177,6 +1177,9 @@ async function loadSpacesView() {
           const full = await fetchJSON(`/api/spaces/${s.id}`);
           const { id } = await fetchJSON('/api/spaces', { method: 'POST', body: { name: `${s.name} copy` } });
           if (full.canvasState) await fetchJSON(`/api/spaces/${id}`, { method: 'PUT', body: { canvasState: full.canvasState } });
+          // The one path tracked creators/categories are allowed to move
+          // between spaces on — every other new space starts empty.
+          await fetchJSON(`/api/spaces/${s.id}/duplicate-tracking`, { method: 'POST', body: { intoSpaceId: id } });
           loadSpacesView();
         } },
         { label: 'Delete', danger: true, onClick: async () => {
@@ -3037,7 +3040,7 @@ async function searchCreator() {
   state.displayCount = 15; // a fresh search always starts back at the top 15; "Load more" grows it from here
   state.poolLoadToken++; // invalidate any in-flight loadDefaultPool so it can't clobber this search
   try {
-    const data = await fetchJSON(`/api/creator?input=${encodeURIComponent(input)}&limit=${state.currentLimit}`);
+    const data = await fetchJSON(`/api/creator?input=${encodeURIComponent(input)}&limit=${state.currentLimit}&spaceId=${state.spaceId}`);
     state.currentHandle = data.profile.handle;
     state.hasMore = data.hasMore;
     state.pool.clear();
@@ -3074,7 +3077,7 @@ $('load-more-btn').addEventListener('click', async () => {
   // reveal locally.
   if (state.pool.size >= state.displayCount || !state.hasMore) { renderResults(); return; }
   state.currentLimit += 15;
-  const data = await fetchJSON(`/api/creator?input=${encodeURIComponent(state.currentHandle)}&limit=${state.currentLimit}`);
+  const data = await fetchJSON(`/api/creator?input=${encodeURIComponent(state.currentHandle)}&limit=${state.currentLimit}&spaceId=${state.spaceId}`);
   state.hasMore = data.hasMore;
   addToPool(data.reels, data.profile.handle); // re-renders with the deeper pool
 });
@@ -3083,7 +3086,7 @@ $('load-more-btn').addEventListener('click', async () => {
 
 async function openTrackModal(handle, trackBtnEl) {
   $('track-modal-handle').textContent = `@${handle}`;
-  const { categories } = await fetchJSON('/api/creator-categories');
+  const { categories } = await fetchJSON(`/api/creator-categories?spaceId=${state.spaceId}`);
   let selectedCatId = null;
   const list = $('track-cat-list');
   $('track-modal-hint').classList.remove('show');
@@ -3104,7 +3107,7 @@ async function openTrackModal(handle, trackBtnEl) {
   $('track-new-cat-btn').onclick = async () => {
     const name = $('track-new-cat-input').value.trim();
     if (!name) return;
-    const data = await fetchJSON('/api/creator-categories', { method: 'POST', body: { name } });
+    const data = await fetchJSON('/api/creator-categories', { method: 'POST', body: { name, spaceId: state.spaceId } });
     categories.length = 0;
     categories.push(...data.categories);
     $('track-new-cat-input').value = '';
@@ -3114,8 +3117,8 @@ async function openTrackModal(handle, trackBtnEl) {
   $('track-modal-cancel').onclick = () => $('track-modal').classList.remove('open');
   $('track-modal-ok').onclick = async () => {
     if (selectedCatId == null) { $('track-modal-hint').classList.add('show'); return; }
-    await fetchJSON('/api/bookmarks', { method: 'POST', body: { handle, action: 'add' } });
-    await fetchJSON('/api/bookmarks/category', { method: 'POST', body: { handle, categoryId: selectedCatId } });
+    await fetchJSON('/api/bookmarks', { method: 'POST', body: { handle, action: 'add', spaceId: state.spaceId } });
+    await fetchJSON('/api/bookmarks/category', { method: 'POST', body: { handle, categoryId: selectedCatId, spaceId: state.spaceId } });
     $('track-modal').classList.remove('open');
     if (trackBtnEl) trackBtnEl.textContent = `✓ Tracking @${handle}`;
     loadTrackedCategories();
@@ -3126,8 +3129,8 @@ async function openTrackModal(handle, trackBtnEl) {
 
 async function loadTrackedCategories() {
   const [{ categories }, { bookmarks }] = await Promise.all([
-    fetchJSON('/api/creator-categories'),
-    fetchJSON('/api/bookmarks'),
+    fetchJSON(`/api/creator-categories?spaceId=${state.spaceId}`),
+    fetchJSON(`/api/bookmarks?spaceId=${state.spaceId}`),
   ]);
   state.allTracked = bookmarks;
   state.categories = categories;
@@ -3154,7 +3157,7 @@ async function loadTrackedCategories() {
         exitSearchIfActive();
         if (e.target.checked) {
           state.checkedHandles.add(c.handle);
-          const data = await fetchJSON(`/api/creator?input=${encodeURIComponent(c.handle)}`); // no explicit limit — inherits server's REELS_LIMIT (60), deep enough for accurate top-15 ranking
+          const data = await fetchJSON(`/api/creator?input=${encodeURIComponent(c.handle)}&spaceId=${state.spaceId}`); // no explicit limit — inherits server's REELS_LIMIT (60), deep enough for accurate top-15 ranking
           state.creatorHasMore.set(c.handle, data.hasMore);
           addToPool(data.reels, data.profile.handle);
         } else {
@@ -3177,7 +3180,7 @@ async function loadDefaultPool() {
     for (const h of state.checkedHandles) {
       if (state.poolLoadToken !== token) return;
       try {
-        const data = await fetchJSON(`/api/creator?input=${encodeURIComponent(h)}`); // no explicit limit — inherits server's REELS_LIMIT (60), deep enough for accurate top-15 ranking
+        const data = await fetchJSON(`/api/creator?input=${encodeURIComponent(h)}&spaceId=${state.spaceId}`); // no explicit limit — inherits server's REELS_LIMIT (60), deep enough for accurate top-15 ranking
         if (state.poolLoadToken !== token) return;
         state.creatorHasMore.set(h, data.hasMore);
         addToPool(data.reels, data.profile.handle);
@@ -3191,7 +3194,7 @@ async function loadDefaultPool() {
   for (const b of state.allTracked) {
     if (state.poolLoadToken !== token) return;
     try {
-      const data = await fetchJSON(`/api/creator?input=${encodeURIComponent(b.handle)}`); // no explicit limit — inherits server's REELS_LIMIT (60), deep enough for accurate top-15 ranking
+      const data = await fetchJSON(`/api/creator?input=${encodeURIComponent(b.handle)}&spaceId=${state.spaceId}`); // no explicit limit — inherits server's REELS_LIMIT (60), deep enough for accurate top-15 ranking
       if (state.poolLoadToken !== token) return;
       addToPool(data.reels, data.profile.handle);
     } catch { /* skip creators that fail to load */ }
@@ -3251,7 +3254,7 @@ function renderManageMatrix() {
       const catId = Number(e.target.dataset.cat);
       if (e.target.checked) current.add(catId); else current.delete(catId);
       creator.categoryIds = [...current]; // optimistic, so re-render below reflects it immediately
-      await fetchJSON('/api/bookmarks/categories', { method: 'POST', body: { handle, categoryIds: [...current] } });
+      await fetchJSON('/api/bookmarks/categories', { method: 'POST', body: { handle, categoryIds: [...current], spaceId: state.spaceId } });
       loadTrackedCategories();
     });
   });
@@ -3260,7 +3263,7 @@ function renderManageMatrix() {
       const cat = categories.find((c) => c.id === Number(input.dataset.id));
       const name = input.value.trim();
       if (!name || name === cat.name) { input.value = cat.name; return; }
-      await fetchJSON(`/api/creator-categories/${cat.id}`, { method: 'PATCH', body: { name } });
+      await fetchJSON(`/api/creator-categories/${cat.id}`, { method: 'PATCH', body: { name, spaceId: state.spaceId } });
       await loadTrackedCategories();
     });
     input.addEventListener('keydown', (e) => { if (e.key === 'Enter') input.blur(); });
@@ -3270,7 +3273,7 @@ function renderManageMatrix() {
       const cat = categories.find((c) => c.id === Number(btn.dataset.id));
       const ok = await openConfirmModal({ title: `Delete category "${cat.name}"?`, desc: 'Its creators stay tracked.', okLabel: 'Delete' });
       if (!ok) return;
-      await fetchJSON(`/api/creator-categories/${cat.id}`, { method: 'DELETE' });
+      await fetchJSON(`/api/creator-categories/${cat.id}`, { method: 'DELETE', body: { spaceId: state.spaceId } });
       await loadTrackedCategories();
       renderManageMatrix();
     });
@@ -3280,7 +3283,7 @@ function renderManageMatrix() {
       const handle = btn.dataset.handle;
       const ok = await openConfirmModal({ title: `Stop tracking @${handle}?`, okLabel: 'Stop tracking' });
       if (!ok) return;
-      await fetchJSON('/api/bookmarks', { method: 'POST', body: { handle, action: 'remove' } });
+      await fetchJSON('/api/bookmarks', { method: 'POST', body: { handle, action: 'remove', spaceId: state.spaceId } });
       state.checkedHandles.delete(handle);
       removeFromPoolByHandle(handle);
       syncTrackedLoadMore();
@@ -3300,7 +3303,7 @@ $('manage-new-cat-btn').addEventListener('click', async () => {
   const input = $('manage-new-cat-input');
   const name = input.value.trim();
   if (!name) return;
-  await fetchJSON('/api/creator-categories', { method: 'POST', body: { name } });
+  await fetchJSON('/api/creator-categories', { method: 'POST', body: { name, spaceId: state.spaceId } });
   input.value = '';
   await loadTrackedCategories();
   renderManageMatrix();
