@@ -264,6 +264,30 @@
        clear that. */
     z-index: 11;
   }
+  /* Fixed (not absolute) so it sits correctly whether or not the header
+     itself is in normal flow — pasting a link while the canvas is
+     fullscreen (header hidden) still shows the toast in a sane spot.
+     Stacks top-to-bottom: one entry per in-flight paste, each removed the
+     moment its own fetch resolves — pasting the same link twice shows two
+     stacked entries, not one replaced by the other. */
+  .paste-toast-stack {
+    position: fixed; top: 76px; left: 22px; z-index: 40;
+    display: flex; flex-direction: column; gap: 8px; pointer-events: none;
+  }
+  .paste-toast {
+    display: flex; align-items: center; gap: 8px;
+    background: rgba(20,22,26,0.92); border: 1px solid var(--border); border-radius: var(--radius-sm);
+    padding: 8px 13px; font-size: 12px; color: var(--text-dim);
+    box-shadow: 0 4px 14px rgba(0,0,0,0.35);
+    animation: toast-in 0.18s ease-out;
+  }
+  .paste-toast .spinner {
+    width: 12px; height: 12px; border-radius: 50%;
+    border: 2px solid var(--border-hover); border-top-color: var(--accent);
+    animation: spin 0.7s linear infinite; flex-shrink: 0;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  @keyframes toast-in { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: translateY(0); } }
   /* Fullscreen only: take the header out of the layout flow entirely, so
      .canvas-layout fills the *full* height of #canvas-view instead of
      "full height minus a reserved header-sized gap". Without this, fading
@@ -457,11 +481,6 @@
   .reel-meta .handle { font-size: 11.5px; font-weight: 500; color: var(--text-dim); text-decoration: none; display: inline-block; }
   .reel-meta a.handle:hover { color: var(--text); text-decoration: underline; }
   .reel-meta .views { font-size: 11px; color: var(--text-faint); margin-top: 2px; }
-  /* Flags a reel Instagram itself marks as branded/paid content — its
-     displayed view count on Instagram includes ad-delivered reach that no
-     public scraper can see, so the number shown here is a verified floor,
-     not the true total. See sponsoredNote(). */
-  .sponsored-tag { color: #E8A33D; font-weight: 600; cursor: help; }
 
   .video-node { width: var(--reel-w); }
 
@@ -661,6 +680,7 @@
     <button class="icon-btn" id="settings-btn" title="Settings"></button>
     <button class="icon-btn" id="panel-toggle-btn" title="Toggle creator panel"></button>
   </div>
+  <div class="paste-toast-stack" id="paste-toast-stack"></div>
   <div class="canvas-layout">
     <div id="drawflow">
       <div class="connection-delete-btn" id="connection-delete-btn" title="Remove connection"></div>
@@ -870,6 +890,19 @@
 <script>
 const $ = (id) => document.getElementById(id);
 
+// One toast per in-flight paste — pasting the same link twice stacks two
+// entries rather than one clobbering the other, since each call gets its
+// own element and its own dismiss() tied only to that element. Callers
+// wrap their fetch in try/finally and call dismiss() there so it always
+// disappears, success or failure.
+function showPasteToast(text) {
+  const el = document.createElement('div');
+  el.className = 'paste-toast';
+  el.innerHTML = `<span class="spinner"></span><span>${escapeHtml(text)}</span>`;
+  $('paste-toast-stack').appendChild(el);
+  return () => el.remove();
+}
+
 const ICONS = {
   close: '<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>',
   back: '<line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/>',
@@ -935,55 +968,6 @@ function scoreBadge(score) {
   const cls = score == null ? '' : score >= 3 ? 'score-hot' : score >= 1.5 ? 'score-mid' : 'score-low';
   return `<span class="score ${cls}">${score != null ? score.toFixed(1) + '×' : '—'}</span>`;
 }
-// Instagram's own displayed view count for a branded/paid-partnership post
-// includes ad-delivered reach — verified live against a real reference
-// export (kallaway's #ChatGPT_Partner reel: we show 21.4M, Instagram's own
-// grid shows 28.9M) — and that gap isn't visible through any public
-// scraping route, ours or anyone else's. Rather than silently show a
-// number we know can be a significant undercount, flag it so it reads as
-// "at least this many", not "exactly this many".
-function sponsoredNote(v) {
-  if (!v.paidPartnership) return '';
-  const title = v.manualViews != null
-    ? 'Sponsored/branded content — this number was entered by hand after checking Instagram directly (the real total, not scraped). Click to update it.'
-    : 'Sponsored/branded content — Instagram includes paid ad reach in its own view count for posts like this, which no public scraper can see. This is a verified floor, not the true total. Click to enter the real number if you\'ve checked Instagram directly.';
-  return ` <span class="sponsored-tag" data-handle="${escapeHtml(v.handle || '')}" data-shortcode="${escapeHtml(v.shortCode || '')}" title="${title}">${v.manualViews != null ? 'Sponsored ✓' : 'Sponsored'}</span>`;
-}
-// Only the account owner can see a sponsored post's real (ad-inclusive)
-// view count on Instagram's own dashboard — no scraper can fetch it. If
-// someone here has actually checked it there, this lets them enter it once
-// so the app treats it as authoritative from then on (including for
-// outlier scoring) instead of living with the scraped floor forever.
-// Delegated on document since .sponsored-tag spans are rebuilt constantly
-// (every render, every canvas reload) — a per-element listener would need
-// rewiring every single time.
-document.addEventListener('click', async (e) => {
-  const tag = e.target.closest('.sponsored-tag');
-  if (!tag) return;
-  e.stopPropagation();
-  const handle = tag.dataset.handle;
-  const shortCode = tag.dataset.shortcode;
-  const input = prompt(`Enter the real view count for @${handle}'s reel, as shown on Instagram itself:`);
-  if (input == null) return; // cancelled
-  const views = Number(input.replace(/[,\s]/g, ''));
-  if (!Number.isFinite(views) || views < 0) { alert('Enter a plain number, e.g. 28900000'); return; }
-  try {
-    await fetchJSON('/api/reel-override', { method: 'POST', body: { handle, shortCode, views } });
-  } catch (err) {
-    alert(err.message);
-    return;
-  }
-  // Re-pull whichever creator's data is currently loaded so the corrected
-  // number (and its ripple effect on every outlier score for that creator)
-  // shows immediately — cache-hit, no Apify call, since it's already deep
-  // enough on disk.
-  if (state.currentHandle === handle) {
-    const data = await fetchJSON(`/api/creator?input=${encodeURIComponent(handle)}&limit=${state.currentLimit}`);
-    state.hasMore = data.hasMore;
-    addToPool(data.reels, data.profile.handle);
-  }
-  refreshCanvasStatsFromCache(); // also patch any already-placed canvas nodes for this reel
-});
 function imgFallback(el) {
   el.onerror = null;
   el.src = 'data:image/svg+xml;utf8,' + encodeURIComponent(
@@ -1251,7 +1235,7 @@ function buildReelFrame(v) {
     </div>
     <div class="reel-meta">
       ${v.url ? `<a class="handle" href="${v.url}" target="_blank" rel="noopener">@${escapeHtml(v.handle || '')}</a>` : `<div class="handle">@${escapeHtml(v.handle || '')}</div>`}
-      <div class="views">${fmtNum(v.views)} views${sponsoredNote(v)}</div>
+      <div class="views">${fmtNum(v.views)} views</div>
     </div>
   `;
 }
@@ -1845,7 +1829,7 @@ async function refreshCanvasStatsFromCache() {
   Object.entries(data).forEach(([id, n]) => {
     if (n.class === 'video-node') {
       const fresh = stats[n.data.handle]?.[n.data.shortCode];
-      if (fresh && (fresh.views !== n.data.views || fresh.outlierScore !== n.data.outlierScore || fresh.paidPartnership !== n.data.paidPartnership)) {
+      if (fresh && (fresh.views !== n.data.views || fresh.outlierScore !== n.data.outlierScore)) {
         state.editor.updateNodeDataFromId(Number(id), { ...n.data, ...fresh });
         touched.add(Number(id));
       }
@@ -1853,7 +1837,7 @@ async function refreshCanvasStatsFromCache() {
       let changed = false;
       const videos = n.data.videos.map((v) => {
         const fresh = stats[v.handle]?.[v.shortCode];
-        if (fresh && (fresh.views !== v.views || fresh.outlierScore !== v.outlierScore || fresh.paidPartnership !== v.paidPartnership)) { changed = true; return { ...v, ...fresh }; }
+        if (fresh && (fresh.views !== v.views || fresh.outlierScore !== v.outlierScore)) { changed = true; return { ...v, ...fresh }; }
         return v;
       });
       if (changed) {
@@ -2374,7 +2358,12 @@ function initEditor() {
 
     if (isProfile) {
       $('search-input').value = trimmed;
-      searchCreator();
+      const dismiss = showPasteToast('Loading profile…');
+      try {
+        await searchCreator();
+      } finally {
+        dismiss();
+      }
       return;
     }
     // Landing on the canvas, not the search panel — no need to borrow its
@@ -2385,6 +2374,7 @@ function initEditor() {
     const statusEl = $('search-status');
     statusEl.classList.remove('error');
     statusEl.textContent = ''; // clear any stale error from a previous paste
+    const dismiss = showPasteToast('Loading reel…');
     try {
       const { reel } = await fetchJSON(`/api/reel?input=${encodeURIComponent(trimmed)}`);
       const centerX = (editor.container.clientWidth / 2) / editor.zoom - editor.canvas_x / editor.zoom;
@@ -2394,6 +2384,8 @@ function initEditor() {
     } catch (err) {
       statusEl.textContent = err.message;
       statusEl.classList.add('error');
+    } finally {
+      dismiss();
     }
   });
 
@@ -2668,13 +2660,10 @@ $('account-delete-btn').addEventListener('click', async () => {
 
 function renderResults() {
   const list = [...state.pool.values()];
-  // Outlier score is capped (OUTLIER_SCORE_CAP in server.js) so two very
-  // different reels can tie at the same displayed score — verified live on
-  // kallaway, where a 52.6M-view reel and a 21.4M-view reel both cap at
-  // 100x. Without a tiebreaker, sort order for ties falls back to array
-  // order (most-recent-first, from the server), which silently ranked the
-  // smaller one above the bigger one. Views-desc as the tiebreaker means a
-  // tie always resolves to the actually-bigger reel.
+  // Views-desc as a tiebreaker on exact outlier-score ties (rare, but
+  // possible when two reels land on the exact same views÷median ratio) —
+  // without it, sort order falls back to array order (most-recent-first
+  // from the server), which could rank a tied-but-smaller reel first.
   const sorted = state.sortMode === 'outlier'
     ? list.sort((a, b) => (b.outlierScore ?? -1) - (a.outlierScore ?? -1) || (b.views ?? 0) - (a.views ?? 0))
     : list.sort((a, b) => new Date(b.timestamp || 0) - new Date(a.timestamp || 0));
@@ -2707,7 +2696,7 @@ function renderResults() {
       </div>
       <div class="info">
         <div>@${escapeHtml(r.handle || '')}</div>
-        <div class="views">${fmtNum(r.views)} views${sponsoredNote(r)}</div>
+        <div class="views">${fmtNum(r.views)} views</div>
       </div>
     `;
     card.querySelector('.play-btn').addEventListener('click', (e) => { e.stopPropagation(); playInline(card.querySelector('.reel-frame'), r); });
