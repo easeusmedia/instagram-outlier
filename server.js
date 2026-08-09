@@ -803,16 +803,18 @@ if (AUTH_ENABLED) {
   });
 }
 
+// v1 is the homepage for now. Old app still reachable at /index.html.
+app.get('/', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'v1.html'));
+});
+app.get('/v1', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'v1.html'));
+});
+
 // `extensions: ['html']` is what makes /login resolve to public/login.html
 // without a redirect or a dedicated route — a bare .html-less URL reads as
 // more polished than instagram-outlier.onrender.com/login.html.
 app.use(express.static(path.join(__dirname, 'public'), { extensions: ['html'] }));
-
-// v1: the new node-canvas UI, served as its own page so the base app at "/"
-// is untouched. Same backend, same database, different frontend.
-app.get('/v1', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'v1.html'));
-});
 
 app.get('/api/creator', async (req, res) => {
   try {
