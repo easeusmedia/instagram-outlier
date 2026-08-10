@@ -604,6 +604,33 @@
   .bottom-toolbar .zoom-pct { font-size: 11.5px; color: var(--text-faint); width: 42px; text-align: center; user-select: none; }
   .bottom-toolbar .sep { width: 1px; height: 20px; background: var(--border-hover); margin: 0 4px; }
 
+  /* --- testing-phase feedback ----------------------------------------- */
+  .feedback-btn {
+    position: fixed; bottom: 20px; left: 20px; z-index: 20;
+    display: flex; align-items: center; gap: 7px;
+    background: rgba(12,14,17,0.85); border: 1px solid var(--border-hover); border-radius: 16px;
+    padding: 9px 14px; color: var(--text-dim); font-size: 12.5px; font-weight: 500; cursor: pointer;
+    box-shadow: 0 14px 34px rgba(0,0,0,0.5); backdrop-filter: var(--glass-blur);
+  }
+  .feedback-btn:hover { color: var(--text); border-color: var(--border); }
+  .feedback-drop {
+    border: 1px dashed var(--border-hover); border-radius: var(--radius-sm);
+    padding: 10px; min-height: 70px; display: flex; flex-wrap: wrap; gap: 8px; align-content: flex-start;
+  }
+  .feedback-drop.drag-over { border-color: var(--accent); background: var(--accent-soft); }
+  .feedback-drop .hint { color: var(--text-faint); font-size: 11.5px; padding: 4px; }
+  .feedback-shot { position: relative; width: 56px; height: 56px; border-radius: 6px; overflow: hidden; flex-shrink: 0; }
+  .feedback-shot img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .feedback-shot button {
+    position: absolute; top: 2px; right: 2px; width: 16px; height: 16px; border-radius: 50%;
+    background: rgba(0,0,0,0.7); border: none; color: #fff; display: flex; align-items: center; justify-content: center; cursor: pointer; padding: 0;
+  }
+  #feedback-textarea {
+    width: 100%; min-height: 80px; resize: vertical; margin-top: 10px;
+    background: var(--surface); border: 1px solid var(--border-hover); border-radius: var(--radius-sm);
+    color: var(--text); font: inherit; font-size: 13px; padding: 10px; box-sizing: border-box;
+  }
+
   /* --- search panel ------------------------------------------------- */
   /* A floating overlay anchored to .canvas-layout (position:relative),
      not a flex sibling of #drawflow — so #drawflow's own box never
@@ -914,6 +941,23 @@
   </div>
 </div>
 
+<button class="feedback-btn" id="feedback-btn" title="Report a problem"></button>
+<div class="modal-overlay" id="feedback-modal">
+  <div class="modal" style="width:420px">
+    <h3>Report a problem</h3>
+    <p class="modal-desc">Describe what happened and/or paste a screenshot (⌘V / Ctrl+V) — you can add more than one.</p>
+    <div class="feedback-drop" id="feedback-drop">
+      <div class="hint" id="feedback-drop-hint">Click here, then paste a screenshot — or drag one in.</div>
+    </div>
+    <textarea id="feedback-textarea" placeholder="What went wrong?"></textarea>
+    <p class="modal-hint show" id="feedback-status" style="color:var(--text-faint)"></p>
+    <div class="modal-actions">
+      <button class="secondary" id="feedback-cancel">Cancel</button>
+      <button class="primary" id="feedback-submit">Send</button>
+    </div>
+  </div>
+</div>
+
 <script src="https://cdn.jsdelivr.net/gh/jerosoler/Drawflow/dist/drawflow.min.js"></script>
 <script>
 const $ = (id) => document.getElementById(id);
@@ -955,6 +999,7 @@ const ICONS = {
   attach: '<path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/>',
   copy: '<rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>',
   check: '<polyline points="20 6 9 17 4 12"/>',
+  feedback: '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>',
 };
 function icon(name, { size = 16 } = {}) {
   return `<svg class="icon" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">${ICONS[name]}</svg>`;
@@ -1215,6 +1260,7 @@ const state = {
   poolLoadToken: 0, // bumped to invalidate an in-flight loadDefaultPool() when a search takes over
   pendingConnection: null,
   tool: 'cursor', // 'cursor' | 'frame' — which bottom-toolbar tool is active on the canvas
+  betaMode: false, isAdmin: false, // testing-phase caps — set from /api/account before boot continues
 };
 
 // Fixed WORLD-SPACE half-extent the camera can roam — expressed in local
@@ -1234,6 +1280,75 @@ function panBounds(zoom, rect) {
 function findNodesByClass(cls) {
   const data = state.editor.drawflow.drawflow.Home.data;
   return Object.keys(data).filter((id) => data[id].class === cls).map(Number);
+}
+
+// --- testing-phase caps: 5 videos + 5 AI scripts per creator, per space ---
+// Both are read straight off the canvas's own data — no separate counter to
+// keep in sync with node add/remove/undo. Admins are exempt (they're the
+// ones running the beta, not a tester being rate-limited).
+const BETA_PER_CREATOR_CAP = 5;
+function betaCapped() { return state.betaMode && !state.isAdmin; }
+
+function countCanvasVideosForHandle(handle) {
+  const data = state.editor.drawflow.drawflow.Home.data;
+  let count = 0;
+  for (const node of Object.values(data)) {
+    if (node.class === 'video-node' && node.data.handle === handle) count++;
+    else if (node.class === 'group-node') count += (node.data.videos || []).filter((v) => v.handle === handle).length;
+  }
+  return count;
+}
+
+// Filters a batch of about-to-be-added videos down to however many still
+// fit under the cap, so dropping a multi-select group only ever adds what's
+// allowed instead of failing the whole drop.
+function filterVideosUnderCap(videos) {
+  if (!betaCapped()) return { allowed: videos, blockedCount: 0 };
+  const seenPerHandle = {};
+  const allowed = [];
+  let blockedCount = 0;
+  for (const v of videos) {
+    const already = countCanvasVideosForHandle(v.handle) + (seenPerHandle[v.handle] || 0);
+    if (already < BETA_PER_CREATOR_CAP) {
+      allowed.push(v);
+      seenPerHandle[v.handle] = (seenPerHandle[v.handle] || 0) + 1;
+    } else {
+      blockedCount++;
+    }
+  }
+  return { allowed, blockedCount };
+}
+
+function showBetaLimitToast(text) {
+  const el = document.createElement('div');
+  el.className = 'paste-toast';
+  el.innerHTML = `<span>${escapeHtml(text)}</span>`;
+  $('paste-toast-stack').appendChild(el);
+  setTimeout(() => el.remove(), 3500);
+}
+
+// A "script" is one AI Assistant reply generated using a given creator's
+// videos as context — counted straight from canvas data (assistant messages
+// on any chat-node currently fed by that handle's videos), not a separate
+// tally, so it can't drift from what's actually on the canvas. Chained
+// chat-to-chat sources aren't attributed further upstream — an edge case
+// that's fine to under-count for a beta cap.
+function countScriptsForHandle(handle) {
+  const data = state.editor.drawflow.drawflow.Home.data;
+  let count = 0;
+  for (const node of Object.values(data)) {
+    if (node.class !== 'chat-node') continue;
+    const connections = node.inputs?.input_1?.connections || [];
+    const touchesHandle = connections.some((c) => {
+      const src = data[c.node];
+      if (!src) return false;
+      if (src.class === 'video-node') return src.data.handle === handle;
+      if (src.class === 'group-node') return (src.data.videos || []).some((v) => v.handle === handle);
+      return false;
+    });
+    if (touchesHandle) count += (node.data.messages || []).filter((m) => m.role === 'assistant').length;
+  }
+  return count;
 }
 
 // Drawflow starts tracking a node-drag on *any* mousedown inside a node
@@ -1822,6 +1937,28 @@ function wireChatNode(nodeId) {
     statusEl.classList.remove('error');
     const curData = state.editor.drawflow.drawflow.Home.data[nodeId].data;
     const priorMessages = chatMessages(curData);
+
+    // Testing-phase cap: only checked on a fresh conversation's first turn,
+    // same moment connected sources get read — a follow-up refining an
+    // already-generated script isn't a new one.
+    if (betaCapped() && priorMessages.length === 0) {
+      const connections = state.editor.drawflow.drawflow.Home.data[nodeId].inputs.input_1?.connections || [];
+      const data = state.editor.drawflow.drawflow.Home.data;
+      const handles = new Set();
+      connections.forEach((c) => {
+        const src = data[c.node];
+        if (!src) return;
+        if (src.class === 'video-node' && src.data.handle) handles.add(src.data.handle);
+        else if (src.class === 'group-node') (src.data.videos || []).forEach((v) => v.handle && handles.add(v.handle));
+      });
+      const overCap = [...handles].find((h) => countScriptsForHandle(h) >= BETA_PER_CREATOR_CAP);
+      if (overCap) {
+        statusEl.textContent = `Testing phase: you've hit the ${BETA_PER_CREATOR_CAP}-script limit for @${overCap}.`;
+        statusEl.classList.add('error');
+        return;
+      }
+    }
+
     const attachmentsBlock = staged.map((f) => `--- Attached file: ${f.name} ---\n${f.content}`).join('\n\n');
     const content = [text, attachmentsBlock].filter(Boolean).join('\n\n');
     const messages = [...priorMessages, { role: 'user', content }];
@@ -2556,24 +2693,28 @@ function initEditor() {
     const raw = e.dataTransfer.getData('application/json');
     if (!raw) return;
     const payload = JSON.parse(raw);
+    const incoming = payload.type === 'group' ? payload.videos : [payload];
+    const { allowed, blockedCount } = filterVideosUnderCap(incoming);
+    if (blockedCount) showBetaLimitToast(`Testing phase: ${BETA_PER_CREATOR_CAP} videos per creator — ${blockedCount} skipped.`);
+    if (!allowed.length) return;
     // Dropping straight onto an existing group (from the sidebar, same as
     // dragging an already-on-canvas video onto one) merges into it instead
     // of dropping a new standalone node/group on top of it.
     const groupId = groupAtPoint(e.clientX, e.clientY);
     if (groupId != null) {
-      mergeVideosIntoGroup(groupId, payload.type === 'group' ? payload.videos : [payload]);
+      mergeVideosIntoGroup(groupId, allowed);
       saveCanvasState();
       if (payload.type === 'group') { state.selected.clear(); renderResults(); }
       return;
     }
     const pos = clientToCanvas(e.clientX, e.clientY);
     if (payload.type === 'group') {
-      const id = editor.addNode('group', 0, 1, pos.x, pos.y, 'group-node', { name: 'Group 1', videos: payload.videos }, buildGroupNodeHtml({ name: 'Group 1', videos: payload.videos }));
+      const id = editor.addNode('group', 0, 1, pos.x, pos.y, 'group-node', { name: 'Group 1', videos: allowed }, buildGroupNodeHtml({ name: 'Group 1', videos: allowed }));
       wireGroupNode(id);
       state.selected.clear();
       renderResults();
     } else {
-      const id = editor.addNode(payload.shortCode, 0, 1, pos.x, pos.y, 'video-node', payload, buildVideoNodeHtml(payload));
+      const id = editor.addNode(allowed[0].shortCode, 0, 1, pos.x, pos.y, 'video-node', allowed[0], buildVideoNodeHtml(allowed[0]));
       wireVideoNode(id);
     }
   });
@@ -2616,6 +2757,9 @@ function initEditor() {
     const dismiss = showPasteToast('Loading reel…');
     try {
       const { reel } = await fetchJSON(`/api/reel?input=${encodeURIComponent(trimmed)}`);
+      if (betaCapped() && countCanvasVideosForHandle(reel.handle) >= BETA_PER_CREATOR_CAP) {
+        throw new Error(`Testing phase: you can add up to ${BETA_PER_CREATOR_CAP} videos per creator.`);
+      }
       const centerX = (editor.container.clientWidth / 2) / editor.zoom - editor.canvas_x / editor.zoom;
       const centerY = (editor.container.clientHeight / 2) / editor.zoom - editor.canvas_y / editor.zoom;
       const id = editor.addNode(reel.shortCode, 0, 1, centerX, centerY, 'video-node', reel, buildVideoNodeHtml(reel));
@@ -2946,6 +3090,10 @@ function renderResults() {
     });
     card.querySelector('.add-btn').addEventListener('click', (e) => {
       e.stopPropagation();
+      if (betaCapped() && countCanvasVideosForHandle(r.handle) >= BETA_PER_CREATOR_CAP) {
+        showBetaLimitToast(`Testing phase: you can add up to ${BETA_PER_CREATOR_CAP} videos per creator.`);
+        return;
+      }
       const editor = state.editor;
       const centerX = (editor.container.clientWidth / 2) / editor.zoom - editor.canvas_x / editor.zoom;
       const centerY = (editor.container.clientHeight / 2) / editor.zoom - editor.canvas_y / editor.zoom;
@@ -3309,11 +3457,114 @@ $('manage-new-cat-btn').addEventListener('click', async () => {
   renderManageMatrix();
 });
 
+// --- testing-phase feedback ---------------------------------------------
+
+$('feedback-btn').innerHTML = icon('feedback', { size: 15 }) + '<span>Feedback</span>';
+
+// Downscaled + re-encoded client-side before it ever leaves the browser —
+// a raw screen-capture PNG can be several MB; nothing here needs more than
+// enough pixels to read a UI bug, so this keeps a few screenshots well
+// under the request size limit instead of needing real object storage.
+function compressImageFile(file, maxDim = 1400, quality = 0.72) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      const scale = Math.min(1, maxDim / Math.max(img.width, img.height));
+      const canvas = document.createElement('canvas');
+      canvas.width = img.width * scale;
+      canvas.height = img.height * scale;
+      canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+      resolve(canvas.toDataURL('image/jpeg', quality));
+      URL.revokeObjectURL(img.src);
+    };
+    img.onerror = reject;
+    img.src = URL.createObjectURL(file);
+  });
+}
+
+(function initFeedbackWidget() {
+  const modal = $('feedback-modal');
+  const drop = $('feedback-drop');
+  const hint = $('feedback-drop-hint');
+  const textarea = $('feedback-textarea');
+  const statusEl = $('feedback-status');
+  const submitBtn = $('feedback-submit');
+  let images = []; // staged data: URLs
+
+  function renderShots() {
+    drop.querySelectorAll('.feedback-shot').forEach((el) => el.remove());
+    hint.style.display = images.length ? 'none' : 'block';
+    images.forEach((src, i) => {
+      const shot = document.createElement('div');
+      shot.className = 'feedback-shot';
+      shot.innerHTML = `<img src="${src}" /><button data-idx="${i}">${icon('close', { size: 9 })}</button>`;
+      shot.querySelector('button').addEventListener('click', () => { images.splice(i, 1); renderShots(); });
+      drop.appendChild(shot);
+    });
+  }
+
+  async function addFiles(files) {
+    for (const file of files) {
+      if (!file.type.startsWith('image/')) continue;
+      try { images.push(await compressImageFile(file)); } catch { /* skip an unreadable image */ }
+    }
+    renderShots();
+  }
+
+  function openModal() {
+    images = [];
+    textarea.value = '';
+    statusEl.textContent = '';
+    renderShots();
+    modal.classList.add('open');
+    textarea.focus();
+  }
+  $('feedback-btn').addEventListener('click', openModal);
+  $('feedback-cancel').addEventListener('click', () => modal.classList.remove('open'));
+
+  drop.tabIndex = 0;
+  drop.addEventListener('paste', (e) => addFiles([...e.clipboardData.files]));
+  document.addEventListener('paste', (e) => {
+    if (!modal.classList.contains('open') || document.activeElement === textarea) return;
+    addFiles([...e.clipboardData.files]);
+  });
+  drop.addEventListener('dragover', (e) => { e.preventDefault(); drop.classList.add('drag-over'); });
+  drop.addEventListener('dragleave', () => drop.classList.remove('drag-over'));
+  drop.addEventListener('drop', (e) => {
+    e.preventDefault();
+    drop.classList.remove('drag-over');
+    addFiles([...e.dataTransfer.files]);
+  });
+
+  submitBtn.addEventListener('click', async () => {
+    const message = textarea.value.trim();
+    if (!message && !images.length) { statusEl.textContent = 'Write something or attach a screenshot.'; return; }
+    submitBtn.disabled = true;
+    statusEl.textContent = 'Sending…';
+    try {
+      await fetchJSON('/api/feedback', { method: 'POST', body: { message, images } });
+      modal.classList.remove('open');
+    } catch (err) {
+      statusEl.textContent = err.message;
+    } finally {
+      submitBtn.disabled = false;
+    }
+  });
+})();
+
 // --- boot -------------------------------------------------------------
 
-const spaceId = new URLSearchParams(location.search).get('space');
-if (spaceId) openSpace(Number(spaceId));
-else loadSpacesView();
+(async () => {
+  try {
+    const account = await fetchJSON('/api/account');
+    state.betaMode = !!account.betaMode;
+    state.isAdmin = !!account.isAdmin;
+  } catch { /* not signed in yet — the auth gate will already be redirecting */ }
+
+  const spaceId = new URLSearchParams(location.search).get('space');
+  if (spaceId) openSpace(Number(spaceId));
+  else loadSpacesView();
+})();
 </script>
 </body>
 </html>

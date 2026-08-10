@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Kompass — Admin</title>
+<style>
+  :root { color-scheme: dark; }
+  body {
+    margin: 0; min-height: 100vh; padding: 40px 24px 80px;
+    background: #05070a; color: #EDF1F7;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  }
+  .wrap { max-width: 780px; margin: 0 auto; }
+  h1 { font-size: 20px; font-weight: 500; margin: 0 0 4px; }
+  h2 { font-size: 14px; font-weight: 500; margin: 36px 0 12px; color: #8A93A3; text-transform: uppercase; letter-spacing: .04em; }
+  p.sub { color: #8A93A3; font-size: 13px; margin: 0; }
+  .card {
+    background: rgba(255,255,255,0.035); border: 1px solid rgba(255,255,255,0.09);
+    border-radius: 12px; padding: 16px 18px; margin-bottom: 10px;
+  }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid rgba(255,255,255,0.07); }
+  th { color: #8A93A3; font-weight: 500; font-size: 11.5px; text-transform: uppercase; letter-spacing: .03em; }
+  .badge { font-size: 10.5px; background: rgba(76,141,255,0.18); color: #7FB0FF; padding: 2px 7px; border-radius: 999px; margin-left: 6px; }
+  button {
+    background: #EDF1F7; color: #05070a; border: none; border-radius: 8px;
+    padding: 7px 13px; font-size: 12.5px; font-weight: 500; cursor: pointer;
+  }
+  button:hover { background: #cfd6e0; }
+  .fb-head { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; margin-bottom: 8px; }
+  .fb-email { font-weight: 500; font-size: 13px; }
+  .fb-time { font-size: 11.5px; color: #5B6472; white-space: nowrap; }
+  .fb-message { font-size: 13px; line-height: 1.5; white-space: pre-wrap; color: #D6DAE2; margin: 0 0 10px; }
+  .fb-shots { display: flex; flex-wrap: wrap; gap: 8px; }
+  .fb-shots img {
+    width: 96px; height: 96px; object-fit: cover; border-radius: 8px; cursor: zoom-in;
+    border: 1px solid rgba(255,255,255,0.09);
+  }
+  .empty { color: #5B6472; font-size: 13px; }
+  #lightbox {
+    display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.85);
+    align-items: center; justify-content: center; z-index: 100; cursor: zoom-out;
+  }
+  #lightbox.open { display: flex; }
+  #lightbox img { max-width: 92vw; max-height: 92vh; border-radius: 8px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Testing phase — Admin</h1>
+  <p class="sub" id="who"></p>
+
+  <h2>Signed-up testers</h2>
+  <div class="card">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px">
+      <p class="sub" id="tester-count"></p>
+      <button id="copy-emails">Copy all emails</button>
+    </div>
+    <table id="users-table"><tbody></tbody></table>
+  </div>
+
+  <h2>Feedback</h2>
+  <div id="feedback-list"></div>
+</div>
+
+<div id="lightbox"><img id="lightbox-img" /></div>
+
+<script>
+async function fetchJSON(url) {
+  const res = await fetch(url);
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || 'Request failed.');
+  return data;
+}
+function escapeHtml(s) {
+  return String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+function fmtTime(iso) {
+  try { return new Date(iso).toLocaleString(); } catch { return iso; }
+}
+
+(async () => {
+  try {
+    const account = await fetchJSON('/api/account');
+    if (!account.isAdmin) { document.body.innerHTML = '<div class="wrap"><p class="sub">Admins only.</p></div>'; return; }
+    document.getElementById('who').textContent = `Signed in as ${account.email}`;
+  } catch {
+    document.body.innerHTML = '<div class="wrap"><p class="sub">Sign in required.</p></div>';
+    return;
+  }
+
+  const { users } = await fetchJSON('/api/admin/users');
+  document.getElementById('tester-count').textContent = `${users.length} account${users.length === 1 ? '' : 's'}`;
+  document.querySelector('#users-table tbody').innerHTML = users.map((u) => `
+    <tr><td>${escapeHtml(u.email)}${u.is_admin ? '<span class="badge">admin</span>' : ''}</td><td>${fmtTime(u.created_at)}</td></tr>
+  `).join('') || '<tr><td class="empty">No accounts yet.</td></tr>';
+  document.getElementById('copy-emails').addEventListener('click', () => {
+    navigator.clipboard.writeText(users.map((u) => u.email).join(', '));
+  });
+
+  const { feedback } = await fetchJSON('/api/feedback');
+  const list = document.getElementById('feedback-list');
+  if (!feedback.length) {
+    list.innerHTML = '<p class="empty">No feedback submitted yet.</p>';
+  } else {
+    list.innerHTML = feedback.map((f) => `
+      <div class="card">
+        <div class="fb-head">
+          <span class="fb-email">${escapeHtml(f.email || 'unknown')}</span>
+          <span class="fb-time">${fmtTime(f.created_at)}</span>
+        </div>
+        ${f.message ? `<p class="fb-message">${escapeHtml(f.message)}</p>` : ''}
+        ${f.images.length ? `<div class="fb-shots">${f.images.map((src) => `<img src="${src}" />`).join('')}</div>` : ''}
+      </div>
+    `).join('');
+    list.querySelectorAll('.fb-shots img').forEach((img) => {
+      img.addEventListener('click', () => {
+        document.getElementById('lightbox-img').src = img.src;
+        document.getElementById('lightbox').classList.add('open');
+      });
+    });
+    document.getElementById('lightbox').addEventListener('click', function () { this.classList.remove('open'); });
+  }
+})();
+</script>
+</body>
+</html>

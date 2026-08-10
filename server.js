@@ -28,6 +28,11 @@ const PORT = process.env.PORT || 3000;
 // while still keeping view/like counts (which only change on a full
 // re-scrape, not a lighter check) from going stale indefinitely.
 const REFRESH_COOLDOWN_MS = 7 * 24 * 60 * 60 * 1000; // once a week
+// Testing-phase limits (creator search cap, per-creator video/script caps,
+// hidden Google login) — on by default since that's the phase we're in now.
+// Flip to 'false' in the environment for the real launch, no code change.
+const BETA_MODE = process.env.BETA_MODE !== 'false';
+const BETA_CREATOR_SEARCH_CAP = 5;
 // ------------------------------------------------------------------------
 
 // --- login: email/password accounts + optional Google OAuth ------------
@@ -186,6 +191,19 @@ await run(`ALTER TABLE bookmark_categories ADD COLUMN IF NOT EXISTS space_id INT
 await run(`ALTER TABLE bookmark_categories DROP CONSTRAINT IF EXISTS bookmark_categories_pkey`);
 await run(`ALTER TABLE bookmark_categories ADD PRIMARY KEY (space_id, handle, category_id)`);
 await run(`ALTER TABLE creator_categories ADD COLUMN IF NOT EXISTS space_id INTEGER NOT NULL DEFAULT 0`);
+// Spaces themselves were global too — any logged-in user could list, open,
+// edit, or delete anyone else's space by id. Fine with one user; not once
+// real testers each have their own account. NULL owner_email (every space
+// created before this) gets backfilled to the admin account once, below.
+await run(`ALTER TABLE spaces ADD COLUMN IF NOT EXISTS owner_email TEXT`);
+// Testing-phase: which creators a non-admin account has already spent one
+// of its 5 search slots on. A handle already in here is free to re-search
+// (only *new* distinct handles count against the cap).
+await run(`CREATE TABLE IF NOT EXISTS beta_creator_searches (email TEXT NOT NULL, handle TEXT NOT NULL, searched_at TEXT NOT NULL, PRIMARY KEY (email, handle))`);
+// Testing-phase: bug reports from testers. images is a JSON array of
+// already-compressed data: URLs (client resizes before sending) — plain
+// TEXT is fine at this volume, no need for object storage yet.
+await run(`CREATE TABLE IF NOT EXISTS feedback (id SERIAL PRIMARY KEY, email TEXT, message TEXT, images TEXT, created_at TEXT NOT NULL)`);
 await run(`CREATE TABLE IF NOT EXISTS users (id SERIAL PRIMARY KEY, email TEXT UNIQUE NOT NULL, password_hash TEXT NOT NULL, is_admin BOOLEAN NOT NULL DEFAULT FALSE, created_at TEXT NOT NULL)`);
 // Added after the table already existed in production — ADD COLUMN IF NOT
 // EXISTS patches it in place instead of needing a separate migration flag.
@@ -669,8 +687,9 @@ const app = express();
 // data), and a handful of group-nodes each holding several videos'
 // thumbnails/captions adds up fast — confirmed live, a space with ~10
 // real nodes plus a dozen more comfortably cleared 100kb and got a save
-// silently rejected with a generic 413.
-app.use(express.json({ limit: '10mb' }));
+// silently rejected with a generic 413. Raised again for feedback reports —
+// a handful of resized-but-still-real screenshots easily clears 10mb.
+app.use(express.json({ limit: '20mb' }));
 
 app.get('/auth/google', (req, res) => {
   const state = crypto.randomBytes(16).toString('hex');
@@ -768,18 +787,26 @@ app.get('/auth/logout', (req, res) => {
 
 app.get('/api/me', (req, res) => {
   const email = AUTH_ENABLED ? verifySessionCookie(parseCookies(req).session) : null;
-  res.json({ authEnabled: AUTH_ENABLED, email });
+  res.json({ authEnabled: AUTH_ENABLED, email, betaMode: BETA_MODE });
 });
 
 function sessionEmail(req) {
   return AUTH_ENABLED ? verifySessionCookie(parseCookies(req).session) : null;
 }
 
+// The admin account (seeded from ADMIN_EMAIL) is the one using the app
+// itself during the testing phase — testing-phase caps below all exempt it.
+async function isAdminEmail(email) {
+  if (!email) return false;
+  const user = await queryOne('SELECT is_admin FROM users WHERE email = ?', [email]);
+  return !!user?.is_admin;
+}
+
 app.get('/api/account', async (req, res) => {
   const email = sessionEmail(req);
   if (!email) return res.status(401).json({ error: 'Sign in required.' });
   const user = await queryOne('SELECT name, is_admin, has_password FROM users WHERE email = ?', [email]);
-  res.json({ email, name: user?.name || '', isAdmin: !!user?.is_admin, hasPassword: !!user?.has_password });
+  res.json({ email, name: user?.name || '', isAdmin: !!user?.is_admin, hasPassword: !!user?.has_password, betaMode: BETA_MODE });
 });
 
 app.patch('/api/account', async (req, res) => {
@@ -850,6 +877,21 @@ app.get('/api/creator', async (req, res) => {
 
     const username = parsed.type === 'post' ? await resolveOwnerFromPost(parsed.kind, parsed.code) : parsed.username;
     const handle = username.toLowerCase();
+
+    // Testing-phase cap: only *new* distinct handles count — re-opening an
+    // already-searched/tracked creator is always free, so this never blocks
+    // normal use of what someone's already tracking.
+    if (BETA_MODE && !(await isAdminEmail(sessionEmail(req)))) {
+      const email = sessionEmail(req);
+      if (!(await queryOne('SELECT 1 FROM beta_creator_searches WHERE email = ? AND handle = ?', [email, handle]))) {
+        const { n } = await queryOne('SELECT COUNT(*)::int AS n FROM beta_creator_searches WHERE email = ?', [email]);
+        if (n >= BETA_CREATOR_SEARCH_CAP) {
+          return res.status(403).json({ error: `Testing phase: you can search up to ${BETA_CREATOR_SEARCH_CAP} creators.` });
+        }
+        await run('INSERT INTO beta_creator_searches (email, handle, searched_at) VALUES (?, ?, ?)', [email, handle, new Date().toISOString()]);
+      }
+    }
+
     const forceRefresh = req.query.refresh === '1';
     const requestedLimit = Math.max(1, parseInt(req.query.limit, 10) || REELS_LIMIT);
 
@@ -1210,32 +1252,40 @@ app.get('/api/search', async (req, res) => {
 
 // --- v1 canvas: spaces ---------------------------------------------------
 
+// Every space is owned by exactly the account that created it — none of
+// these endpoints trust a bare :id without also checking it belongs to
+// whoever's asking (a 404, same as "doesn't exist", rather than a 403 that
+// would confirm some other space id is real).
+async function ownedSpace(id, email) {
+  return queryOne('SELECT id, name, canvas_state, created_at FROM spaces WHERE id = ? AND owner_email = ?', [id, email]);
+}
+
 app.get('/api/spaces', async (req, res) => {
-  const rows = await queryAll('SELECT id, name, created_at FROM spaces ORDER BY id DESC');
+  const rows = await queryAll('SELECT id, name, created_at FROM spaces WHERE owner_email = ? ORDER BY id DESC', [sessionEmail(req)]);
   res.json({ spaces: rows });
 });
 
 app.post('/api/spaces', async (req, res) => {
   const name = ((req.body && req.body.name) || '').trim();
   if (!name) return res.status(400).json({ error: 'Name is required.' });
-  const row = await queryOne('INSERT INTO spaces (name, canvas_state, created_at) VALUES (?, ?, ?) RETURNING id', [
+  const row = await queryOne('INSERT INTO spaces (name, canvas_state, created_at, owner_email) VALUES (?, ?, ?, ?) RETURNING id', [
     name,
     null,
     new Date().toISOString(),
+    sessionEmail(req),
   ]);
   res.json({ id: row.id });
 });
 
 app.get('/api/spaces/:id', async (req, res) => {
-  const row = await queryOne('SELECT id, name, canvas_state, created_at FROM spaces WHERE id = ?', [
-    Number(req.params.id),
-  ]);
+  const row = await ownedSpace(Number(req.params.id), sessionEmail(req));
   if (!row) return res.status(404).json({ error: 'Space not found.' });
   res.json({ id: row.id, name: row.name, createdAt: row.created_at, canvasState: row.canvas_state ? JSON.parse(row.canvas_state) : null });
 });
 
 app.put('/api/spaces/:id', async (req, res) => {
   const id = Number(req.params.id);
+  if (!(await ownedSpace(id, sessionEmail(req)))) return res.status(404).json({ error: 'Space not found.' });
   const body = req.body || {};
   if (body.name != null) {
     const name = body.name.trim();
@@ -1253,6 +1303,7 @@ app.put('/api/spaces/:id', async (req, res) => {
 
 app.delete('/api/spaces/:id', async (req, res) => {
   const id = Number(req.params.id);
+  if (!(await ownedSpace(id, sessionEmail(req)))) return res.status(404).json({ error: 'Space not found.' });
   await run('DELETE FROM spaces WHERE id = ?', [id]);
   // Tracked creators/categories aren't a foreign key away from spaces (no
   // cascade), so a deleted space's rows would otherwise sit around forever.
@@ -1287,9 +1338,14 @@ async function duplicateSpaceTracking(fromSpaceId, toSpaceId) {
 }
 
 app.post('/api/spaces/:id/duplicate-tracking', async (req, res) => {
+  const email = sessionEmail(req);
+  const fromSpaceId = Number(req.params.id);
   const toSpaceId = Number(req.body && req.body.intoSpaceId);
   if (!toSpaceId) return res.status(400).json({ error: 'intoSpaceId is required.' });
-  await duplicateSpaceTracking(Number(req.params.id), toSpaceId);
+  if (!(await ownedSpace(fromSpaceId, email)) || !(await ownedSpace(toSpaceId, email))) {
+    return res.status(404).json({ error: 'Space not found.' });
+  }
+  await duplicateSpaceTracking(fromSpaceId, toSpaceId);
   res.json({ ok: true });
 });
 
@@ -1403,6 +1459,41 @@ app.get('/api/image-proxy', async (req, res) => {
   }
 });
 
+// --- testing-phase feedback -------------------------------------------
+
+async function requireAdmin(req, res) {
+  const email = sessionEmail(req);
+  if (!(await isAdminEmail(email))) {
+    res.status(403).json({ error: 'Admins only.' });
+    return null;
+  }
+  return email;
+}
+
+app.post('/api/feedback', async (req, res) => {
+  const message = ((req.body && req.body.message) || '').trim();
+  const images = Array.isArray(req.body && req.body.images) ? req.body.images : [];
+  if (!message && !images.length) return res.status(400).json({ error: 'Write something or attach a screenshot.' });
+  await run('INSERT INTO feedback (email, message, images, created_at) VALUES (?, ?, ?, ?)', [
+    sessionEmail(req), message, JSON.stringify(images), new Date().toISOString(),
+  ]);
+  res.json({ ok: true });
+});
+
+app.get('/api/feedback', async (req, res) => {
+  if (!(await requireAdmin(req, res))) return;
+  const rows = await queryAll('SELECT id, email, message, images, created_at FROM feedback ORDER BY created_at DESC');
+  res.json({ feedback: rows.map((r) => ({ ...r, images: r.images ? JSON.parse(r.images) : [] })) });
+});
+
+// Everyone who's signed up during the testing phase — so their email is on
+// hand to notify at launch, without wiring up an actual mailing list yet.
+app.get('/api/admin/users', async (req, res) => {
+  if (!(await requireAdmin(req, res))) return;
+  const rows = await queryAll('SELECT email, created_at, is_admin FROM users ORDER BY created_at DESC');
+  res.json({ users: rows });
+});
+
 // One-time-per-boot migration: outlierScore's formula changed from
 // "views ÷ median" to the IQR-rule version above. Recomputes it for every
 // already-cached creator so scores don't sit inconsistent between old and
@@ -1465,6 +1556,20 @@ async function migrateSpaceScopedTrackingSeed() {
   await run("INSERT INTO settings (key, value) VALUES ('spaceScopedTrackingSeedV1', '1')");
 }
 await migrateSpaceScopedTrackingSeed();
+
+// One-time: spaces had no owner at all before per-account access existed —
+// every space that already exists was made by whoever was using the app,
+// i.e. the admin account. Backfilling to that (rather than leaving them
+// ownerless) is what keeps them showing up post-deploy instead of looking
+// deleted. Any space created from here on gets its real owner_email at
+// creation time, so this never needs to run again.
+async function migrateSpaceOwnership() {
+  if (await queryOne("SELECT value FROM settings WHERE key = 'spaceOwnershipV1'")) return;
+  const adminEmail = (process.env.ADMIN_EMAIL || '').trim().toLowerCase();
+  if (adminEmail) await run('UPDATE spaces SET owner_email = ? WHERE owner_email IS NULL', [adminEmail]);
+  await run("INSERT INTO settings (key, value) VALUES ('spaceOwnershipV1', '1')");
+}
+await migrateSpaceOwnership();
 
 // Not gated by a settings flag like the migrations above: the WHERE clause
 // itself is the guard (only ever touches rows still missing an embedding),
