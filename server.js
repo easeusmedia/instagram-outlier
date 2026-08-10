@@ -957,8 +957,8 @@ app.get('/api/reel', async (req, res) => {
   }
 });
 
-// Canvas nodes store a *frozen* copy of a reel's views/outlierScore/likes
-// from whenever it was dragged onto the canvas — that's what lets the
+// Canvas nodes store a *frozen* copy of a reel's views/outlierScore/likes/
+// thumbnail from whenever it was dragged onto the canvas — that's what lets the
 // canvas render instantly without a network round-trip per node, but it
 // means a node placed weeks ago just sits there silently drifting further
 // from reality while the background weekly refresh keeps the underlying
@@ -979,8 +979,15 @@ app.get('/api/reel-stats', async (req, res) => {
       const reels = await getCreatorReels(handle);
       if (!reels) continue;
       stats[handle] = {};
+      // thumbnail matters here too, not just the numbers: Instagram's CDN
+      // thumbnail URLs carry a signed, expiring token (the oe= param) — a
+      // node frozen weeks ago eventually 403s on that exact URL even though
+      // nothing about the reel itself changed. Each weekly background
+      // re-scrape re-normalizes it with a fresh token (see mergeReels), so
+      // handing the current cached one back here fixes it the same way
+      // stale views/likes already get fixed.
       for (const r of reels) {
-        stats[handle][r.shortCode] = { views: r.views, outlierScore: r.outlierScore, likes: r.likes };
+        stats[handle][r.shortCode] = { views: r.views, outlierScore: r.outlierScore, likes: r.likes, thumbnail: r.thumbnail };
       }
       refreshCreatorInBackground(handle, reels, reels.length);
     }
