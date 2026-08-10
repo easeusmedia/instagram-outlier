@@ -669,6 +669,12 @@ async function refreshCreatorInBackground(handle, cachedReels, limit) {
 // --- app --------------------------------------------------------------
 
 const app = express();
+// Render (and most hosts) terminate TLS at their own proxy and forward
+// plain HTTP to the app — without this, req.protocol always reads 'http'
+// even on a real https:// request, which made the Google OAuth redirect_uri
+// we build ourselves (oauthRedirectUri below) come out as http://, mismatching
+// the https:// URI registered in Google Cloud Console every single time.
+app.set('trust proxy', 1);
 // Express's default 100kb limit is easy to hit here specifically: a
 // space's canvas_state includes every node's *rendered* HTML (not just
 // data), and a handful of group-nodes each holding several videos'
