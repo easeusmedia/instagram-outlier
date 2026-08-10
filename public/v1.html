@@ -223,7 +223,7 @@
   /* --- spaces landing view ------------------------------------------- */
   #spaces-view { height: 100%; overflow-y: auto; padding: 60px 40px; }
   .spaces-header { display: flex; align-items: center; justify-content: center; position: relative; max-width: 1040px; margin: 0 auto 56px; }
-  .spaces-header h1 { font-size: 20px; font-weight: 500; color: var(--text-dim); display: flex; align-items: center; gap: 9px; }
+  .spaces-header h1 { font-size: 20px; font-weight: 500; color: var(--text-dim); }
   .spaces-header .back-link { position: absolute; right: 0; color: var(--text-faint); text-decoration: none; font-size: 12.5px; }
   .spaces-header .back-link:hover { color: var(--text-dim); }
   /* Lets you reach Settings (and log out) from the spaces list, without
@@ -683,14 +683,7 @@
 <div id="spaces-view">
   <div class="spaces-header">
     <button class="icon-btn" id="spaces-settings-btn" title="Settings"></button>
-    <h1>
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-        <circle cx="12" cy="12" r="9.3" stroke="currentColor" stroke-opacity="0.35" stroke-width="1.2"/>
-        <polygon points="12,4.2 15.1,12 8.9,12" fill="var(--accent)"/>
-        <polygon points="12,19.8 15.1,12 8.9,12" fill="currentColor" fill-opacity="0.3"/>
-      </svg>
-      Kompass
-    </h1>
+    <h1>Kompass</h1>
     <a class="back-link" href="/">&larr; back to base app</a>
   </div>
   <div class="create-hero">
