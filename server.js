@@ -186,6 +186,11 @@ await run(`ALTER TABLE bookmark_categories ADD COLUMN IF NOT EXISTS space_id INT
 await run(`ALTER TABLE bookmark_categories DROP CONSTRAINT IF EXISTS bookmark_categories_pkey`);
 await run(`ALTER TABLE bookmark_categories ADD PRIMARY KEY (space_id, handle, category_id)`);
 await run(`ALTER TABLE creator_categories ADD COLUMN IF NOT EXISTS space_id INTEGER NOT NULL DEFAULT 0`);
+// Spaces themselves were global too — any logged-in user could list, open,
+// edit, or delete anyone else's space by id. Fine with one user; not once
+// a second real account exists. NULL owner_email (every space created
+// before this) gets backfilled to the admin account once, below.
+await run(`ALTER TABLE spaces ADD COLUMN IF NOT EXISTS owner_email TEXT`);
 await run(`CREATE TABLE IF NOT EXISTS users (id SERIAL PRIMARY KEY, email TEXT UNIQUE NOT NULL, password_hash TEXT NOT NULL, is_admin BOOLEAN NOT NULL DEFAULT FALSE, created_at TEXT NOT NULL)`);
 // Added after the table already existed in production — ADD COLUMN IF NOT
 // EXISTS patches it in place instead of needing a separate migration flag.
@@ -1210,32 +1215,40 @@ app.get('/api/search', async (req, res) => {
 
 // --- v1 canvas: spaces ---------------------------------------------------
 
+// Every space is owned by exactly the account that created it — none of
+// these endpoints trust a bare :id without also checking it belongs to
+// whoever's asking (a 404, same as "doesn't exist", rather than a 403 that
+// would confirm some other space id is real).
+async function ownedSpace(id, email) {
+  return queryOne('SELECT id, name, canvas_state, created_at FROM spaces WHERE id = ? AND owner_email = ?', [id, email]);
+}
+
 app.get('/api/spaces', async (req, res) => {
-  const rows = await queryAll('SELECT id, name, created_at FROM spaces ORDER BY id DESC');
+  const rows = await queryAll('SELECT id, name, created_at FROM spaces WHERE owner_email = ? ORDER BY id DESC', [sessionEmail(req)]);
   res.json({ spaces: rows });
 });
 
 app.post('/api/spaces', async (req, res) => {
   const name = ((req.body && req.body.name) || '').trim();
   if (!name) return res.status(400).json({ error: 'Name is required.' });
-  const row = await queryOne('INSERT INTO spaces (name, canvas_state, created_at) VALUES (?, ?, ?) RETURNING id', [
+  const row = await queryOne('INSERT INTO spaces (name, canvas_state, created_at, owner_email) VALUES (?, ?, ?, ?) RETURNING id', [
     name,
     null,
     new Date().toISOString(),
+    sessionEmail(req),
   ]);
   res.json({ id: row.id });
 });
 
 app.get('/api/spaces/:id', async (req, res) => {
-  const row = await queryOne('SELECT id, name, canvas_state, created_at FROM spaces WHERE id = ?', [
-    Number(req.params.id),
-  ]);
+  const row = await ownedSpace(Number(req.params.id), sessionEmail(req));
   if (!row) return res.status(404).json({ error: 'Space not found.' });
   res.json({ id: row.id, name: row.name, createdAt: row.created_at, canvasState: row.canvas_state ? JSON.parse(row.canvas_state) : null });
 });
 
 app.put('/api/spaces/:id', async (req, res) => {
   const id = Number(req.params.id);
+  if (!(await ownedSpace(id, sessionEmail(req)))) return res.status(404).json({ error: 'Space not found.' });
   const body = req.body || {};
   if (body.name != null) {
     const name = body.name.trim();
@@ -1253,6 +1266,7 @@ app.put('/api/spaces/:id', async (req, res) => {
 
 app.delete('/api/spaces/:id', async (req, res) => {
   const id = Number(req.params.id);
+  if (!(await ownedSpace(id, sessionEmail(req)))) return res.status(404).json({ error: 'Space not found.' });
   await run('DELETE FROM spaces WHERE id = ?', [id]);
   // Tracked creators/categories aren't a foreign key away from spaces (no
   // cascade), so a deleted space's rows would otherwise sit around forever.
@@ -1287,9 +1301,14 @@ async function duplicateSpaceTracking(fromSpaceId, toSpaceId) {
 }
 
 app.post('/api/spaces/:id/duplicate-tracking', async (req, res) => {
+  const email = sessionEmail(req);
+  const fromSpaceId = Number(req.params.id);
   const toSpaceId = Number(req.body && req.body.intoSpaceId);
   if (!toSpaceId) return res.status(400).json({ error: 'intoSpaceId is required.' });
-  await duplicateSpaceTracking(Number(req.params.id), toSpaceId);
+  if (!(await ownedSpace(fromSpaceId, email)) || !(await ownedSpace(toSpaceId, email))) {
+    return res.status(404).json({ error: 'Space not found.' });
+  }
+  await duplicateSpaceTracking(fromSpaceId, toSpaceId);
   res.json({ ok: true });
 });
 
@@ -1465,6 +1484,20 @@ async function migrateSpaceScopedTrackingSeed() {
   await run("INSERT INTO settings (key, value) VALUES ('spaceScopedTrackingSeedV1', '1')");
 }
 await migrateSpaceScopedTrackingSeed();
+
+// One-time: spaces had no owner at all before per-account access existed —
+// every space that already exists was made by whoever was using the app,
+// i.e. the admin account. Backfilling to that (rather than leaving them
+// ownerless) is what keeps them showing up post-deploy instead of looking
+// deleted. Any space created from here on gets its real owner_email at
+// creation time, so this never needs to run again.
+async function migrateSpaceOwnership() {
+  if (await queryOne("SELECT value FROM settings WHERE key = 'spaceOwnershipV1'")) return;
+  const adminEmail = (process.env.ADMIN_EMAIL || '').trim().toLowerCase();
+  if (adminEmail) await run('UPDATE spaces SET owner_email = ? WHERE owner_email IS NULL', [adminEmail]);
+  await run("INSERT INTO settings (key, value) VALUES ('spaceOwnershipV1', '1')");
+}
+await migrateSpaceOwnership();
 
 // Not gated by a settings flag like the migrations above: the WHERE clause
 // itself is the guard (only ever touches rows still missing an embedding),
